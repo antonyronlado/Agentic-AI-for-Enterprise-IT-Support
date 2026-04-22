@@ -1,0 +1,458 @@
+[
+  {
+    "id": "kb-001",
+    "title": "Password Reset Procedure",
+    "category": "access",
+    "description": "User cannot log in, forgot password, or account is locked out",
+    "steps": [
+      "Verify user identity via employee ID and registered email.",
+      "Navigate to Active Directory → Users → Locate the account.",
+      "Click 'Reset Password' and generate a temporary secure password.",
+      "Ensure 'User must change password at next logon' is checked.",
+      "Notify user via registered email with the temporary password.",
+      "Confirm MFA (multi-factor authentication) is still active after reset.",
+      "Log resolution in ticket system with timestamp."
+    ],
+    "automated": true,
+    "result": "Password successfully reset. User can now log in.",
+    "escalationReason": null
+  },
+  {
+    "id": "kb-002",
+    "title": "VPN Connection Failure",
+    "category": "network",
+    "description": "User cannot connect to VPN, VPN client error, remote access issue",
+    "steps": [
+      "Check if the VPN client is up-to-date — update if not.",
+      "Verify the user is connecting to the correct VPN server address.",
+      "Ask the user to disable any third-party firewall/antivirus temporarily.",
+      "Run the VPN client as Administrator.",
+      "Clear VPN client cache: go to Settings → Clear Saved Sessions.",
+      "Check VPN gateway availability from the network admin portal.",
+      "If issue persists, re-install the VPN client from the IT software portal."
+    ],
+    "automated": true,
+    "result": "VPN connection restored.",
+    "escalationReason": null
+  },
+  {
+    "id": "kb-003",
+    "title": "Blue Screen of Death (BSOD) / System Crash",
+    "category": "hardware",
+    "description": "Computer shows blue screen, crashes, kernel panic, stop error",
+    "steps": [
+      "Note the stop code displayed on the BSOD screen (e.g., MEMORY_MANAGEMENT).",
+      "Restart the machine and boot into Safe Mode.",
+      "Open Event Viewer → Windows Logs → System — check for critical errors.",
+      "Run Windows Memory Diagnostic Tool (mdsched.exe) to test RAM.",
+      "Run sfc /scannow in an elevated Command Prompt to repair system files.",
+      "Check for recent driver updates and roll back any new drivers.",
+      "If stop code relates to disk: run chkdsk /f /r on the system drive.",
+      "Escalate to hardware team if RAM or disk failure is confirmed."
+    ],
+    "automated": false,
+    "result": "Root cause identified; follow-up action required.",
+    "escalationReason": "Possible hardware failure — L2 hardware team review needed."
+  },
+  {
+    "id": "kb-004",
+    "title": "Software Installation Request",
+    "category": "software",
+    "description": "User needs to install software, application not available, software request",
+    "steps": [
+      "Verify software is listed in the approved IT software catalog.",
+      "Check if the user has a valid license or license is available in the pool.",
+      "Approve or deny request via the IT request management portal.",
+      "If approved, push installation via SCCM/Intune to the user's device.",
+      "Notify user when installation is complete.",
+      "Update the CMDB with the new software installation record."
+    ],
+    "automated": false,
+    "result": "Software installation request submitted for approval.",
+    "escalationReason": "Requires IT manager approval for non-standard software."
+  },
+  {
+    "id": "kb-005",
+    "title": "Cannot Access Shared Network Drive",
+    "category": "network",
+    "description": "Network drive not mapped, cannot access shared folder, file server unreachable",
+    "steps": [
+      "Verify user is connected to the corporate network or VPN.",
+      "Check that the network drive mapping exists: open File Explorer → This PC.",
+      "Re-map the drive: right-click This PC → Map Network Drive → enter the UNC path.",
+      "Confirm the user has permissions in Active Directory for the shared folder.",
+      "Test connectivity to the file server: ping <server-name>.",
+      "Check file server status on the infrastructure dashboard.",
+      "Submit firewall rule review request if access is still denied."
+    ],
+    "automated": true,
+    "result": "Network drive access restored.",
+    "escalationReason": null
+  },
+  {
+    "id": "kb-006",
+    "title": "Email Not Syncing / Outlook Issues",
+    "category": "software",
+    "description": "Outlook not sending or receiving emails, email sync issues, OST file corrupt",
+    "steps": [
+      "Check user's internet and Exchange server connectivity.",
+      "Restart Outlook and verify the account is connected (bottom status bar).",
+      "Run Outlook in safe mode: Win+R → outlook /safe.",
+      "Rebuild the Outlook profile: Control Panel → Mail → Show Profiles → Add.",
+      "If OST file is corrupted, run scanpst.exe (Inbox Repair Tool).",
+      "Verify Exchange server status from the admin portal.",
+      "Re-activate Microsoft 365 license if activation error appears."
+    ],
+    "automated": true,
+    "result": "Outlook sync restored.",
+    "escalationReason": null
+  },
+  {
+    "id": "kb-007",
+    "title": "Printer Not Working",
+    "category": "hardware",
+    "description": "Printer offline, cannot print, print spooler error, printer not found",
+    "steps": [
+      "Check printer power and physical cable/wireless connection.",
+      "Set the printer as the default printer: Settings → Printers & Scanners.",
+      "Clear the print queue: Services → Print Spooler → Stop → delete files in C:\\Windows\\System32\\spool\\PRINTERS → Restart spooler.",
+      "Remove and re-add the printer from Printers & Scanners settings.",
+      "Re-install printer drivers from the manufacturer or IT software portal.",
+      "Test printing a test page from the printer's own display.",
+      "If network printer, verify the printer IP is reachable via ping."
+    ],
+    "automated": true,
+    "result": "Printer connectivity restored.",
+    "escalationReason": null
+  },
+  {
+    "id": "kb-008",
+    "title": "Suspected Malware / Virus Infection",
+    "category": "software",
+    "description": "Malware detected, ransomware, suspicious files, antivirus alert, computer infected",
+    "steps": [
+      "IMMEDIATELY disconnect the device from the corporate network (unplug LAN / disable Wi-Fi).",
+      "Do NOT shut the machine down — preserve volatile memory for forensics.",
+      "Notify the Security Operations Center (SOC) immediately via phone.",
+      "Open the endpoint security console to isolate the machine remotely.",
+      "Capture a memory dump and disk image for forensic analysis.",
+      "Initiate the Incident Response runbook (IR-SEC-001).",
+      "Reset all credentials the machine had access to from a clean device."
+    ],
+    "automated": false,
+    "result": "Security incident initiated. Awaiting SOC response.",
+    "escalationReason": "Security incident — mandatory SOC and management escalation."
+  },
+  {
+    "id": "kb-009",
+    "title": "Multi-Factor Authentication (MFA) Setup / Reset",
+    "category": "access",
+    "description": "User lost MFA device, cannot receive OTP, MFA authenticator app not working, new phone setup",
+    "steps": [
+      "Verify user identity via HR department or manager confirmation.",
+      "Admin: sign in to Azure AD / Okta → Select user → Authentication methods.",
+      "Delete the existing MFA methods for the user.",
+      "Send the user a fresh MFA registration link via a secondary verified channel.",
+      "Guide the user to re-enroll the Authenticator app on the new device.",
+      "Test login with the new MFA setup before closing the ticket.",
+      "Log the MFA reset event in the security audit trail."
+    ],
+    "automated": false,
+    "result": "MFA successfully reset and re-enrolled.",
+    "escalationReason": "Requires identity verification — cannot be fully automated."
+  },
+  {
+    "id": "kb-010",
+    "title": "Internet / Network Connectivity Issues",
+    "category": "network",
+    "description": "No internet access, slow internet, DNS failure, IP conflict",
+    "steps": [
+      "Run ipconfig /all to check IP configuration.",
+      "Try ipconfig /release followed by ipconfig /renew to get a fresh IP.",
+      "Flush DNS cache: ipconfig /flushdns.",
+      "Test connectivity: ping 8.8.8.8 (Google DNS) and ping google.com.",
+      "If DNS fails but IP works, set DNS to 8.8.8.8 manually.",
+      "Check network adapter settings for IP conflicts.",
+      "Restart the network adapter: Device Manager → Network Adapters → Disable/Enable.",
+      "Escalate to network team if the issue affects multiple users."
+    ],
+    "automated": true,
+    "result": "Network connectivity restored.",
+    "escalationReason": null
+  },
+  {
+    "id": "kb-011",
+    "title": "Computer Running Slow / High CPU Usage",
+    "category": "software",
+    "description": "Laptop is very slow, high CPU or memory usage, applications freezing",
+    "steps": [
+      "Open Task Manager (Ctrl+Shift+Esc) → identify processes consuming high CPU/memory.",
+      "End non-essential high-usage processes.",
+      "Check startup programs: Task Manager → Startup tab → Disable unnecessary items.",
+      "Run Disk Cleanup and clear temporary files.",
+      "Check for pending Windows Updates — install and restart.",
+      "Run Malwarebytes scan to rule out malware.",
+      "If RAM is below 8GB, submit a hardware upgrade request via the IT portal.",
+      "If SSD is full, archive old files to network storage."
+    ],
+    "automated": true,
+    "result": "Performance improved. Long-term: hardware review recommended.",
+    "escalationReason": null
+  },
+  {
+    "id": "kb-012",
+    "title": "Application Crashing or Not Opening",
+    "category": "software",
+    "description": "Application keeps crashing, software not responding, app fails to launch",
+    "steps": [
+      "Check Event Viewer → Application logs for the specific crash error.",
+      "Run the application as Administrator.",
+      "Clear application cache / temp files.",
+      "Uninstall and re-install the application from the IT software portal.",
+      "Check if the application is compatible with the current OS version.",
+      "Verify that required dependencies (e.g., .NET, Visual C++ Redistributable) are installed.",
+      "Submit a bug report to the software vendor if issue persists."
+    ],
+    "automated": true,
+    "result": "Application reinstalled and running normally.",
+    "escalationReason": null
+  },
+  {
+    "id": "kb-013",
+    "title": "New Employee Onboarding — Account Setup",
+    "category": "access",
+    "description": "New employee account creation, new user setup, create AD account, onboarding",
+    "steps": [
+      "Receive approved onboarding form from HR with employee details.",
+      "Create Active Directory account with correct OU, department, and manager.",
+      "Assign Microsoft 365 license group based on job role.",
+      "Add user to appropriate security groups and distribution lists.",
+      "Provision email account and send welcome email with credentials.",
+      "Configure MFA registration and send enrollment link.",
+      "Set up laptop via Autopilot or image deployment with user profile.",
+      "Brief user on IT policies and provide IT helpdesk contact."
+    ],
+    "automated": false,
+    "result": "New user account created and device provisioned.",
+    "escalationReason": "Requires HR authorization and IT manager approval."
+  },
+  {
+    "id": "kb-014",
+    "title": "Data Recovery / Deleted File Recovery",
+    "category": "software",
+    "description": "Accidentally deleted files, need to recover data, files missing",
+    "steps": [
+      "Check the Recycle Bin first — restore if file is there.",
+      "Check OneDrive / SharePoint version history for cloud-synced files.",
+      "On file servers: right-click the folder → Properties → Previous Versions to restore from shadow copy.",
+      "If files were on a local drive, use Windows File History if configured.",
+      "Submit a formal data recovery request to the backup team if shadow copy fails.",
+      "Do not write new data to the disk where files were deleted (to prevent overwrite).",
+      "Escalate to L3 storage team for enterprise backup restore."
+    ],
+    "automated": false,
+    "result": "Data recovery in progress — backup team engaged.",
+    "escalationReason": "Backup restore requires L3 storage team involvement."
+  },
+  {
+    "id": "kb-015",
+    "title": "Webcam / Microphone Not Working",
+    "category": "hardware",
+    "description": "Camera not detected, microphone not working, video call issues, Teams/Zoom no audio",
+    "steps": [
+      "Check Device Manager for webcam/microphone errors — update or rollback drivers.",
+      "Verify app permissions: Settings → Privacy → Camera / Microphone → Allow.",
+      "Test the device in a browser-based test (e.g., webcamtests.com) to isolate OS vs app issue.",
+      "Close all other apps that may be using the camera/mic.",
+      "In Teams/Zoom: Settings → Devices → select the correct audio/video device.",
+      "Plug external USB webcam/mic into a different USB port.",
+      "Restart the Windows Audio service: Services → Windows Audio → Restart."
+    ],
+    "automated": true,
+    "result": "Webcam/microphone working correctly.",
+    "escalationReason": null
+  },
+  {
+    "id": "kb-016",
+    "title": "Microsoft Teams Issues (Not Loading / Login Error)",
+    "category": "software",
+    "description": "Teams not starting, Teams frozen, Teams login loop, error code caa20004",
+    "steps": [
+      "Sign out of Teams and sign back in.",
+      "Clear Teams cache: close Teams → delete contents of %appdata%\\Microsoft\\Teams.",
+      "Run Teams as Administrator.",
+      "Check Microsoft 365 service health dashboard for any outages.",
+      "Re-install Teams from the Microsoft website or IT portal.",
+      "Verify that Microsoft 365 license is assigned to the user in admin center.",
+      "Check proxy/firewall settings if the user is on a restricted network."
+    ],
+    "automated": true,
+    "result": "Teams client restored and user can sign in.",
+    "escalationReason": null
+  },
+  {
+    "id": "kb-017",
+    "title": "Phishing Email Reported",
+    "category": "software",
+    "description": "User received suspicious email, phishing attempt, email with malicious link",
+    "steps": [
+      "Instruct the user NOT to click any links or download attachments from the email.",
+      "Ask user to forward the email as an attachment to the SOC mailbox: security@company.com.",
+      "Delete the email from the user's inbox immediately.",
+      "Check if the user clicked any links before reporting.",
+      "If links were clicked: isolate the machine and initiate security incident.",
+      "Submit the sender domain to the email gateway block list.",
+      "Issue a company-wide advisory if this is a widespread campaign."
+    ],
+    "automated": false,
+    "result": "Phishing email reported and sender blocked.",
+    "escalationReason": "Security team must investigate any link-clicked incidents."
+  },
+  {
+    "id": "kb-018",
+    "title": "Hard Drive / SSD Failure",
+    "category": "hardware",
+    "description": "Disk read error, hard drive clicking noise, SSD not detected, storage failure",
+    "steps": [
+      "Immediately run a backup of all accessible data to a network share.",
+      "Run SMART diagnostics: use CrystalDiskInfo or WMIC diskdrive.",
+      "Boot from a USB diagnostic tool to assess disk health.",
+      "If SMART reports critical failure, initiate hardware replacement immediately.",
+      "Escalate to hardware team with the SMART report attached.",
+      "Order a replacement drive via the procurement portal.",
+      "Re-image the machine with the user's backed-up data after replacement."
+    ],
+    "automated": false,
+    "result": "Hardware replacement initiated.",
+    "escalationReason": "Physical hardware failure — L2 hardware team required."
+  },
+  {
+    "id": "kb-019",
+    "title": "License Expired / Activation Error (Office / Windows)",
+    "category": "software",
+    "description": "Microsoft Office activation error, Windows license expired, product not activated",
+    "steps": [
+      "Check license assignment in Microsoft 365 Admin Center → Active Users.",
+      "Re-assign the Office or Windows license if expired or removed.",
+      "On the user's machine, run: cscript slmgr.vbs /ato to force activation.",
+      "If Office: open any Office app → File → Account → Activate Product.",
+      "Ensure the machine has internet access to reach Microsoft activation servers.",
+      "If using KMS/MAK: verify the KMS server is reachable from the machine.",
+      "Restart the machine after activation."
+    ],
+    "automated": true,
+    "result": "License reactivated successfully.",
+    "escalationReason": null
+  },
+  {
+    "id": "kb-020",
+    "title": "USB Device Not Recognized",
+    "category": "hardware",
+    "description": "USB drive not detected, USB device not working, external hard drive not showing",
+    "steps": [
+      "Try the USB device in a different USB port.",
+      "Check Device Manager for unknown or error devices under Universal Serial Bus.",
+      "Uninstall the USB device from Device Manager and reconnect it.",
+      "Update USB host controller drivers from Device Manager.",
+      "Test the USB device on another machine to rule out device failure.",
+      "Check if USB access is restricted by company policy (GPO/DLP).",
+      "If blocked by policy: submit a data transfer request via the IT portal."
+    ],
+    "automated": true,
+    "result": "USB device recognized and accessible.",
+    "escalationReason": null
+  },
+  {
+    "id": "kb-021",
+    "title": "Remote Desktop (RDP) Connection Failed",
+    "category": "network",
+    "description": "Cannot RDP into a machine, Remote Desktop not working, RDP error code",
+    "steps": [
+      "Verify the target machine is powered on and connected to the network.",
+      "Confirm Remote Desktop is enabled: System Properties → Remote → Allow Remote Connections.",
+      "Check Windows Firewall: ensure Remote Desktop rule is enabled (port 3389).",
+      "Verify the user is in the Remote Desktop Users group on the target machine.",
+      "Check that corporate firewall allows RDP traffic to the target subnet.",
+      "Try connecting via IP instead of hostname.",
+      "Restart Remote Desktop Services on the target machine via services.msc."
+    ],
+    "automated": true,
+    "result": "RDP connection successfully established.",
+    "escalationReason": null
+  },
+  {
+    "id": "kb-022",
+    "title": "Server / Service Outage",
+    "category": "network",
+    "description": "Server is down, critical service unavailable, production outage, all users affected",
+    "steps": [
+      "Immediately alert the on-call infrastructure team via the incident hotline.",
+      "Open a P1 (Critical) incident ticket in the ITSM system.",
+      "Check the server status dashboard and monitoring alerts (Nagios/Datadog).",
+      "Attempt to ping and SSH/RDP into the server for diagnostics.",
+      "Review recent change management logs for any changes made in the last 24h.",
+      "Initiate the Business Continuity/DR plan if RTO is at risk.",
+      "Send a stakeholder communication every 30 minutes until resolution.",
+      "Post-incident: conduct a Root Cause Analysis within 48 hours."
+    ],
+    "automated": false,
+    "result": "Incident escalated to infrastructure team. Stakeholders notified.",
+    "escalationReason": "Critical P1 outage — infrastructure and management must be engaged."
+  },
+  {
+    "id": "kb-023",
+    "title": "Unauthorized Access / Privilege Escalation Attempt",
+    "category": "access",
+    "description": "Unauthorized login, suspicious privilege escalation, admin access attempt, security alert",
+    "steps": [
+      "Lock the affected user account immediately from Active Directory.",
+      "Notify the Security Operations Center (SOC) and CISO office.",
+      "Review authentication logs in SIEM (Splunk/Sentinel) for the time window.",
+      "Identify the source IP and block it via firewall rules.",
+      "Capture all relevant logs and preserve evidence.",
+      "Initiate the Access Control Incident Response runbook.",
+      "Conduct a full permission audit on affected systems.",
+      "If insider threat is suspected, involve HR and Legal."
+    ],
+    "automated": false,
+    "result": "Account locked. Security investigation in progress.",
+    "escalationReason": "Security incident — SOC, CISO, and potentially Legal involvement required."
+  },
+  {
+    "id": "kb-024",
+    "title": "Two-Monitor / Display Setup Issue",
+    "category": "hardware",
+    "description": "Second monitor not detected, display resolution wrong, screen flickering, HDMI/DisplayPort not working",
+    "steps": [
+      "Check physical cable connection (HDMI/DisplayPort/USB-C) at both ends.",
+      "Right-click Desktop → Display Settings → Detect → check if monitor appears.",
+      "Update display/graphics drivers from Device Manager or GPU vendor site.",
+      "Try a different cable or adapter.",
+      "Set the correct display mode: Extended, Duplicate, or Second Screen Only (Win+P).",
+      "Check monitor's own input selector button — ensure correct input is selected.",
+      "Roll back recent graphics driver update if issue appeared after an update."
+    ],
+    "automated": true,
+    "result": "Multi-monitor display configured correctly.",
+    "escalationReason": null
+  },
+  {
+    "id": "kb-025",
+    "title": "Employee Offboarding — Account Deprovisioning",
+    "category": "access",
+    "description": "Employee leaving, disable account, revoke access, offboarding, termination",
+    "steps": [
+      "Receive approved offboarding request from HR with last working date.",
+      "On the last working day: disable the AD account (do NOT delete immediately).",
+      "Revoke all Microsoft 365 licenses and active sessions.",
+      "Remove the user from all security groups and distribution lists.",
+      "Forward email to the line manager for 30 days.",
+      "Transfer OneDrive/SharePoint data to the manager.",
+      "Revoke VPN certificates and MFA registrations.",
+      "Document in CMDB and retain account for 90 days before deletion per policy."
+    ],
+    "automated": false,
+    "result": "User access fully revoked per offboarding policy.",
+    "escalationReason": "Requires HR sign-off and manager approval."
+  }
+]

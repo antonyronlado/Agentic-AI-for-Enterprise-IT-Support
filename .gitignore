@@ -1,0 +1,23 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Python
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# FAISS index (auto-generated on first run)
+backend/faiss_index/
+
+# HuggingFace model cache (large files, auto-downloaded)
+hf_cache/
+
