@@ -4,7 +4,7 @@ export function Skeleton({ className, ...props }) {
   return (
     <div
       data-slot="skeleton"
-      className={cn("bg-white/5 animate-pulse rounded-md", className)}
+      className={cn("bg-slate-200/50 animate-pulse rounded-md", className)}
       {...props}
     />
   )

@@ -6,7 +6,7 @@ export function Card({ className, size = "default", ...props }) {
       data-slot="card"
       data-size={size}
       className={cn(
-        "group/card flex flex-col gap-4 overflow-hidden rounded-xl bg-white/[0.03] py-4 text-sm text-card-foreground ring-1 ring-white/10 backdrop-blur-sm",
+        "group/card flex flex-col gap-4 overflow-hidden rounded-xl bg-white py-4 text-sm text-slate-900 ring-1 ring-slate-200 shadow-sm",
         className
       )}
       {...props}
@@ -38,7 +38,7 @@ export function CardDescription({ className, ...props }) {
   return (
     <div
       data-slot="card-description"
-      className={cn("text-sm text-white/50", className)}
+      className={cn("text-sm text-slate-500", className)}
       {...props}
     />
   )
@@ -68,7 +68,7 @@ export function CardFooter({ className, ...props }) {
   return (
     <div
       data-slot="card-footer"
-      className={cn("flex items-center rounded-b-xl border-t border-white/5 bg-white/[0.02] p-5", className)}
+      className={cn("flex items-center rounded-b-xl border-t border-slate-100 bg-slate-50 p-5", className)}
       {...props}
     />
   )

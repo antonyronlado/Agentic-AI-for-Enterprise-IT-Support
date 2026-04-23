@@ -62,13 +62,13 @@ export function TicketForm({ onTicketCreated }) {
   };
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] backdrop-blur-xl overflow-hidden">
-      <div className="px-5 pt-5 pb-4 border-b border-white/5">
+    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div className="px-5 pt-5 pb-4 border-b border-slate-100 bg-slate-50/50">
         <div className="flex items-center gap-2 mb-1">
           <Sparkles className="w-4 h-4 text-primary" />
-          <h3 className="text-sm font-semibold text-white">New Support Request</h3>
+          <h3 className="text-sm font-semibold text-slate-900">New Support Request</h3>
         </div>
-        <p className="text-[10px] font-mono text-white/30 uppercase tracking-widest">
+        <p className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">
           Agentic AI · NLP Triage · Auto-Prioritize
         </p>
       </div>
@@ -80,7 +80,7 @@ export function TicketForm({ onTicketCreated }) {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-3"
+              className="mb-4 rounded-lg border border-indigo-100 bg-indigo-50/50 p-3"
             >
               <div className="flex items-center gap-3">
                 {STEPS.map((s, i) => {
@@ -90,21 +90,21 @@ export function TicketForm({ onTicketCreated }) {
                   return (
                     <div key={s.id} className="flex items-center gap-1.5">
                       <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${
-                        isDone ? 'bg-emerald-500/20 text-emerald-400' :
-                        isActive ? 'bg-primary/20 text-primary' :
-                        'bg-white/5 text-white/20'
+                        isDone ? 'bg-emerald-100 text-emerald-600' :
+                        isActive ? 'bg-indigo-100 text-indigo-600' :
+                        'bg-slate-100 text-slate-400'
                       }`}>
                         {isDone ? <CheckCircle2 className="w-3 h-3" /> :
                          isActive ? <Loader2 className="w-3 h-3 animate-spin" /> :
                          <Icon className="w-3 h-3" />}
                       </div>
                       <span className={`text-[9px] font-mono uppercase ${
-                        isDone ? 'text-emerald-400' : isActive ? 'text-primary' : 'text-white/20'
+                        isDone ? 'text-emerald-600' : isActive ? 'text-indigo-600' : 'text-slate-400'
                       }`}>
                         {s.label}
                       </span>
                       {i < STEPS.length - 1 && (
-                        <div className={`w-4 h-px mx-1 ${isDone ? 'bg-emerald-500/40' : 'bg-white/10'}`} />
+                        <div className={`w-4 h-px mx-1 ${isDone ? 'bg-emerald-200' : 'bg-slate-200'}`} />
                       )}
                     </div>
                   );
@@ -116,7 +116,7 @@ export function TicketForm({ onTicketCreated }) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-[10px] font-mono uppercase text-white/40 tracking-wider">Subject</label>
+            <label className="text-[10px] font-mono uppercase text-slate-500 tracking-wider">Subject</label>
             <Input
               placeholder="Brief summary of the issue"
               value={title}
@@ -128,8 +128,8 @@ export function TicketForm({ onTicketCreated }) {
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="text-[10px] font-mono uppercase text-white/40 tracking-wider">Description</label>
-              <span className="text-[9px] font-mono text-white/20">{description.length} chars</span>
+              <label className="text-[10px] font-mono uppercase text-slate-500 tracking-wider">Description</label>
+              <span className="text-[9px] font-mono text-slate-400">{description.length} chars</span>
             </div>
             <Textarea
               placeholder="Describe your problem in detail. Our AI agent will analyze it immediately using NLP."
@@ -164,7 +164,7 @@ export function TicketForm({ onTicketCreated }) {
             )}
           </Button>
 
-          <p className="text-[9px] text-center text-white/20 font-mono uppercase tracking-wider">
+          <p className="text-[9px] text-center text-slate-400 font-mono uppercase tracking-wider">
             AI will auto-categorize · prioritize · assess risk
           </p>
         </form>

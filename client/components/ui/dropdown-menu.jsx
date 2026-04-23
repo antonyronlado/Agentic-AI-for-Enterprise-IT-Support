@@ -34,7 +34,7 @@ export function DropdownMenuContent({
         <MenuPrimitive.Popup
           data-slot="dropdown-menu-content"
           className={cn(
-            "z-50 min-w-32 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg bg-[#0d1117] border border-white/10 p-1 text-foreground shadow-xl duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+            "z-50 min-w-32 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg bg-white border border-slate-200 p-1 text-slate-900 shadow-xl duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
             className
           )}
           {...props}
@@ -53,7 +53,7 @@ export function DropdownMenuLabel({ className, inset, ...props }) {
     <MenuPrimitive.GroupLabel
       data-slot="dropdown-menu-label"
       data-inset={inset}
-      className={cn("px-2 py-1 text-xs font-medium text-white/40 data-inset:pl-7", className)}
+      className={cn("px-2 py-1 text-xs font-medium text-slate-500 data-inset:pl-7", className)}
       {...props}
     />
   )
@@ -66,7 +66,7 @@ export function DropdownMenuItem({ className, inset, variant = "default", ...pro
       data-inset={inset}
       data-variant={variant}
       className={cn(
-        "relative flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none select-none focus:bg-white/10 focus:text-foreground data-inset:pl-7 data-[variant=destructive]:text-red-400 data-[variant=destructive]:focus:bg-red-500/10 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none select-none focus:bg-slate-100 focus:text-slate-900 data-inset:pl-7 data-[variant=destructive]:text-red-600 data-[variant=destructive]:focus:bg-red-50 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
@@ -84,7 +84,7 @@ export function DropdownMenuSubTrigger({ className, inset, children, ...props })
       data-slot="dropdown-menu-sub-trigger"
       data-inset={inset}
       className={cn(
-        "flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none select-none focus:bg-white/10 data-inset:pl-7 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none select-none focus:bg-slate-100 data-inset:pl-7 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
@@ -115,7 +115,7 @@ export function DropdownMenuCheckboxItem({ className, children, checked, inset, 
       data-slot="dropdown-menu-checkbox-item"
       data-inset={inset}
       className={cn(
-        "relative flex cursor-default items-center gap-2 rounded-md py-1.5 pr-8 pl-2 text-sm outline-none select-none focus:bg-white/10 data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50",
+        "relative flex cursor-default items-center gap-2 rounded-md py-1.5 pr-8 pl-2 text-sm outline-none select-none focus:bg-slate-100 data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50",
         className
       )}
       checked={checked}
@@ -141,7 +141,7 @@ export function DropdownMenuRadioItem({ className, children, inset, ...props }) 
       data-slot="dropdown-menu-radio-item"
       data-inset={inset}
       className={cn(
-        "relative flex cursor-default items-center gap-2 rounded-md py-1.5 pr-8 pl-2 text-sm outline-none select-none focus:bg-white/10 data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50",
+        "relative flex cursor-default items-center gap-2 rounded-md py-1.5 pr-8 pl-2 text-sm outline-none select-none focus:bg-slate-100 data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50",
         className
       )}
       {...props}
@@ -160,7 +160,7 @@ export function DropdownMenuSeparator({ className, ...props }) {
   return (
     <MenuPrimitive.Separator
       data-slot="dropdown-menu-separator"
-      className={cn("-mx-1 my-1 h-px bg-white/10", className)}
+      className={cn("-mx-1 my-1 h-px bg-slate-200", className)}
       {...props}
     />
   )
@@ -170,7 +170,7 @@ export function DropdownMenuShortcut({ className, ...props }) {
   return (
     <span
       data-slot="dropdown-menu-shortcut"
-      className={cn("ml-auto text-xs tracking-widest text-white/30", className)}
+      className={cn("ml-auto text-xs tracking-widest text-slate-400", className)}
       {...props}
     />
   )

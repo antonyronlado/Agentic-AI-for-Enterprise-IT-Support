@@ -33,8 +33,16 @@ class TicketOut(BaseModel):
     model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
 
 @router.get("", response_model=List[TicketOut])
-async def get_tickets(userId: Optional[str] = None, db=Depends(get_db)):
-    query = {"userId": userId} if userId else {}
+async def get_tickets(userId: Optional[str] = None, role: Optional[str] = "user", db=Depends(get_db)):
+    if role == "admin":
+        # Admin can see all, but filter by userId if specifically requested
+        query = {"userId": userId} if userId else {}
+    else:
+        # Regular user must have userId, if not provided, return none
+        if not userId:
+            return []
+        query = {"userId": userId}
+
     cursor = db.tickets.find(query).sort("updatedAt", -1)
     tickets = await cursor.to_list(length=100)
     for t in tickets:
@@ -63,6 +71,12 @@ async def create_ticket(ticket: TicketCreate, background_tasks: BackgroundTasks,
 
     new_ticket = await db.tickets.insert_one(ticket_dict)
     created_ticket = await db.tickets.find_one({"_id": new_ticket.inserted_id})
+
+    await db.admin_logs.insert_one({
+        "action": "ticket_created",
+        "details": f"Ticket '{ticket.title}' created by user '{ticket.userId}'.",
+        "timestamp": now
+    })
 
     async def _run_pipeline(ticket_id):
         # Must fetch a fresh DB connection if running in background

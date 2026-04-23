@@ -14,15 +14,15 @@ function StatCard({ label, value, color, icon: Icon }) {
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-xl border border-white/5 bg-white/[0.025] p-4 flex flex-col gap-2"
+      className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col gap-2 shadow-sm"
     >
       <div className="flex items-center justify-between">
-        <p className="text-[9px] font-mono text-white/40 uppercase tracking-wider">{label}</p>
-        <div className={`w-6 h-6 rounded-md flex items-center justify-center ${color}/10`}>
-          <Icon className={`w-3 h-3 ${color}`} />
+        <p className="text-[9px] font-mono text-slate-500 uppercase tracking-wider">{label}</p>
+        <div className={`w-6 h-6 rounded-md flex items-center justify-center ${color.replace('text-', 'bg-').replace('400', '50')} ${color.replace('text-', 'text-').replace('400', '600')}`}>
+          <Icon className={`w-3 h-3`} />
         </div>
       </div>
-      <p className={`text-2xl font-black tracking-tight ${color}`}>{value}</p>
+      <p className={`text-2xl font-black tracking-tight ${color.replace('text-', 'text-').replace('400', '600')}`}>{value}</p>
     </motion.div>
   );
 }
@@ -36,7 +36,7 @@ export function UserDashboard() {
     if (!user) return;
     try {
       setLoading(true);
-      const data = await getTickets(user.uid);
+      const data = await getTickets(user.uid, profile?.role || "user");
       setTickets(data);
     } catch (error) {
       toast.error('Failed to load tickets');
@@ -74,34 +74,33 @@ export function UserDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#070b14]">
-      <div className="absolute inset-0 technical-grid opacity-30 pointer-events-none" />
+    <div className="min-h-screen bg-slate-50">
+      <div className="absolute inset-0 technical-grid opacity-[0.15] pointer-events-none" />
 
-      <header className="sticky top-0 z-50 border-b border-white/5 bg-black/50 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur-xl shadow-sm">
         <div className="max-w-7xl mx-auto px-5 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="relative">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center">
                 <ShieldCheck className="w-4 h-4 text-primary" />
               </div>
-              <div className="absolute inset-0 rounded-lg bg-primary/20 blur-md -z-10" />
             </div>
             <div>
-              <h1 className="text-sm font-black tracking-tight text-white">NexusDesk</h1>
-              <p className="text-[9px] font-mono text-white/30 uppercase tracking-widest leading-none">User Portal</p>
+              <h1 className="text-sm font-black tracking-tight text-slate-900">NexusDesk</h1>
+              <p className="text-[9px] font-mono text-slate-500 uppercase tracking-widest leading-none">User Portal</p>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="hidden sm:flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[9px] font-mono text-white/30 uppercase tracking-wider">Live sync</span>
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[9px] font-mono text-slate-400 uppercase tracking-wider">Live sync</span>
             </div>
             <div className="text-right hidden sm:block">
-              <p className="text-xs font-semibold text-white">{profile?.displayName}</p>
-              <p className="text-[9px] font-mono text-primary/60 uppercase">{profile?.role}</p>
+              <p className="text-xs font-semibold text-slate-900">{profile?.displayName}</p>
+              <p className="text-[9px] font-mono text-primary/80 uppercase">{profile?.role}</p>
             </div>
-            <Button variant="ghost" size="icon-sm" onClick={signOut} className="text-white/30 hover:text-red-400">
+            <Button variant="ghost" size="icon-sm" onClick={signOut} className="text-slate-400 hover:text-red-500">
               <LogOut className="w-4 h-4" />
             </Button>
           </div>
@@ -110,19 +109,19 @@ export function UserDashboard() {
 
       <main className="relative max-w-7xl mx-auto px-5 py-8">
         <div className="mb-8">
-          <h2 className="text-xl font-black text-white tracking-tight">
+          <h2 className="text-xl font-black text-slate-900 tracking-tight">
             Welcome back, <span className="text-primary">{profile?.displayName?.split(' ')[0]}</span>
           </h2>
-          <p className="text-sm text-white/40 mt-1">
+          <p className="text-sm text-slate-500 mt-1">
             Your Agentic AI system is monitoring your tickets in real-time.
           </p>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-          <StatCard label="Total Tickets" value={stats.total} color="text-white/70" icon={TicketIcon} />
-          <StatCard label="Active" value={stats.active} color="text-blue-400" icon={TrendingUp} />
-          <StatCard label="Critical" value={stats.critical} color="text-red-400" icon={AlertTriangle} />
-          <StatCard label="Resolved" value={stats.resolved} color="text-emerald-400" icon={CheckCircle2} />
+          <StatCard label="Total Tickets" value={stats.total} color="text-slate-700" icon={TicketIcon} />
+          <StatCard label="Active" value={stats.active} color="text-blue-500" icon={TrendingUp} />
+          <StatCard label="Critical" value={stats.critical} color="text-red-500" icon={AlertTriangle} />
+          <StatCard label="Resolved" value={stats.resolved} color="text-emerald-500" icon={CheckCircle2} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -132,7 +131,7 @@ export function UserDashboard() {
 
           <div className="lg:col-span-8">
             <Tabs defaultValue="all" className="w-full">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
                 <TabsList className="h-8">
                   <TabsTrigger value="all">All ({stats.total})</TabsTrigger>
                   <TabsTrigger value="active">Active ({stats.active})</TabsTrigger>
@@ -160,10 +159,10 @@ export function UserDashboard() {
                       <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className="py-20 text-center rounded-xl border-2 border-dashed border-white/5"
+                        className="py-20 text-center rounded-xl border-2 border-dashed border-slate-200 bg-white"
                       >
-                        <TicketIcon className="w-10 h-10 text-white/10 mx-auto mb-3" />
-                        <p className="text-white/20 font-mono text-[10px] uppercase tracking-widest">
+                        <TicketIcon className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                        <p className="text-slate-400 font-mono text-[10px] uppercase tracking-widest">
                           No tickets in this view
                         </p>
                       </motion.div>

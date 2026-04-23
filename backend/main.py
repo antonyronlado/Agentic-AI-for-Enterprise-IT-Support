@@ -14,7 +14,7 @@ from agents.risk_agent import RiskAgent
 from agents.ticket_analyzer import TicketAnalyzerAgent
 from knowledge_base.kb_loader import KnowledgeBaseLoader
 from models.model_loader import ModelLoader
-from routers import tickets
+from routers import tickets, auth, logs
 
 _analyzer: TicketAnalyzerAgent | None = None
 _resolver: ResolutionAgent | None = None
@@ -89,6 +89,8 @@ class ResolveRequest(BaseModel):
     riskAssessment: Optional[Any] = None
 
 app.include_router(tickets.router)
+app.include_router(auth.router)
+app.include_router(logs.router)
 
 @app.get("/health", tags=["System"])
 async def health():

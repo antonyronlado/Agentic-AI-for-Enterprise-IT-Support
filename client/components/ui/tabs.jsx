@@ -14,11 +14,11 @@ export function Tabs({ className, orientation = "horizontal", ...props }) {
 }
 
 const tabsListVariants = cva(
-  "group/tabs-list inline-flex w-fit items-center justify-center rounded-lg p-[3px] text-white/40",
+  "group/tabs-list inline-flex w-fit items-center justify-center rounded-lg p-[3px] text-slate-500",
   {
     variants: {
       variant: {
-        default: "bg-white/5 border border-white/5",
+        default: "bg-slate-100 border border-slate-200",
         line: "gap-1 bg-transparent",
       },
     },
@@ -44,7 +44,7 @@ export function TabsTrigger({ className, ...props }) {
     <TabsPrimitive.Tab
       data-slot="tabs-trigger"
       className={cn(
-        "relative inline-flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-0.5 text-xs font-medium whitespace-nowrap text-white/50 transition-all hover:text-white focus-visible:ring-2 focus-visible:ring-primary/50 disabled:pointer-events-none disabled:opacity-50 data-active:bg-primary/20 data-active:text-primary data-active:shadow-sm [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        "relative inline-flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-0.5 text-xs font-medium whitespace-nowrap text-slate-500 transition-all hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-primary/50 disabled:pointer-events-none disabled:opacity-50 data-active:bg-white data-active:text-slate-900 data-active:shadow-sm [&_svg]:pointer-events-none [&_svg]:shrink-0",
         className
       )}
       {...props}

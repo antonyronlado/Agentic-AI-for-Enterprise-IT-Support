@@ -13,10 +13,10 @@ const statusConfig = {
 };
 
 const priorityConfig = {
-  low: { color: 'text-white/40', dot: 'bg-white/30' },
-  medium: { color: 'text-blue-400', dot: 'bg-blue-400' },
-  high: { color: 'text-amber-400', dot: 'bg-amber-400' },
-  critical: { color: 'text-red-400', dot: 'bg-red-400' },
+  low: { color: 'text-slate-500', dot: 'bg-slate-400' },
+  medium: { color: 'text-blue-600', dot: 'bg-blue-500' },
+  high: { color: 'text-amber-600', dot: 'bg-amber-500' },
+  critical: { color: 'text-red-600', dot: 'bg-red-500' },
 };
 
 export function TicketCard({ ticket, onClick, onDelete }) {
@@ -35,14 +35,14 @@ export function TicketCard({ ticket, onClick, onDelete }) {
       className="cursor-pointer group relative"
       onClick={onClick}
     >
-      <div className="relative rounded-xl border border-white/5 bg-white/[0.025] backdrop-blur-sm overflow-hidden transition-all duration-200 hover:border-white/10 hover:bg-white/[0.04] hover:shadow-lg hover:shadow-black/20">
+      <div className="relative rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden transition-all duration-200 hover:border-slate-300 hover:bg-slate-50 hover:shadow-md">
         <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${status.color}`} />
 
         <div className="pl-5 pr-4 pt-4 pb-3 space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1 flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[9px] font-mono text-white/30 uppercase tracking-wider">
+                <span className="text-[9px] font-mono text-slate-500 uppercase tracking-wider">
                   #{ticket._id ? ticket._id.slice(0, 8) : ticket.id?.slice(0, 8)}
                 </span>
                 <span className={`inline-flex items-center gap-1 text-[9px] font-mono uppercase px-2 py-0.5 rounded-full border ${status.badge}`}>
@@ -50,7 +50,7 @@ export function TicketCard({ ticket, onClick, onDelete }) {
                   {status.label}
                 </span>
               </div>
-              <p className="text-sm font-semibold text-white leading-snug truncate group-hover:text-primary transition-colors">
+              <p className="text-sm font-semibold text-slate-900 leading-snug truncate group-hover:text-primary transition-colors">
                 {ticket.title}
               </p>
             </div>
@@ -61,12 +61,12 @@ export function TicketCard({ ticket, onClick, onDelete }) {
             </div>
           </div>
 
-          <p className="text-xs text-white/40 line-clamp-2 leading-relaxed">
+          <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
             {ticket.description}
           </p>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center gap-1 text-[9px] font-mono uppercase px-2 py-0.5 rounded-md bg-white/5 text-white/40 border border-white/5">
+            <span className="inline-flex items-center gap-1 text-[9px] font-mono uppercase px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
               {ticket.category}
             </span>
 
@@ -96,8 +96,8 @@ export function TicketCard({ ticket, onClick, onDelete }) {
           </div>
         </div>
 
-        <div className="flex items-center justify-between px-5 py-2.5 border-t border-white/5 bg-black/20">
-          <div className="flex items-center gap-1 text-[9px] font-mono text-white/25">
+        <div className="flex items-center justify-between px-5 py-2.5 border-t border-slate-100 bg-slate-50/50">
+          <div className="flex items-center gap-1 text-[9px] font-mono text-slate-400">
             <Clock className="w-2.5 h-2.5" />
             {new Date(ticket.updatedAt).toLocaleString()}
           </div>
@@ -110,12 +110,12 @@ export function TicketCard({ ticket, onClick, onDelete }) {
                   e.stopPropagation();
                   onDelete(ticket._id || ticket.id);
                 }}
-                className="text-white/30 hover:text-red-400 hover:bg-red-500/10 h-6 w-6"
+                className="text-slate-400 hover:text-red-500 hover:bg-red-50 h-6 w-6"
               >
                 <Trash2 className="w-3 h-3" />
               </Button>
             )}
-            <div className="flex items-center gap-1 text-[9px] font-mono text-white/30 group-hover:text-primary transition-colors">
+            <div className="flex items-center gap-1 text-[9px] font-mono text-slate-400 group-hover:text-primary transition-colors">
               VIEW <ChevronRight className="w-3 h-3" />
             </div>
           </div>

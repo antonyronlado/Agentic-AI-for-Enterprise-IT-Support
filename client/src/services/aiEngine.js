@@ -12,9 +12,27 @@ async function fetchAPI(endpoint, options = {}) {
   return res.json();
 }
 
-export function getTickets(userId) {
-  const query = userId ? `?userId=${userId}` : '';
+export function getTickets(userId, role) {
+  const query = userId ? `?userId=${userId}&role=${role}` : `?role=${role}`;
   return fetchAPI(`/tickets${query}`);
+}
+
+export function getLogs() {
+  return fetchAPI("/logs");
+}
+
+export function login(username, password) {
+  return fetchAPI("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export function register(username, email, password) {
+  return fetchAPI("/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ username, email, password }),
+  });
 }
 
 export function createTicket(ticketData) {

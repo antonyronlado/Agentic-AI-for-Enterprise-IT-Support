@@ -30,7 +30,7 @@ export function AvatarFallback({ className, ...props }) {
     <span
       data-slot="avatar-fallback"
       className={cn(
-        "flex size-full items-center justify-center rounded-full bg-white/10 text-xs font-medium uppercase text-white",
+        "flex size-full items-center justify-center rounded-full bg-slate-100 text-xs font-medium uppercase text-slate-600",
         className
       )}
       {...props}

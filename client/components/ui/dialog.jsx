@@ -39,7 +39,7 @@ export function DialogContent({ className, children, showCloseButton = true, ...
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-[#0d1117] border border-white/10 p-6 text-sm text-foreground shadow-2xl duration-150 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-white border border-slate-200 p-6 text-sm text-slate-900 shadow-2xl duration-150 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}
@@ -74,7 +74,7 @@ export function DialogFooter({ className, showCloseButton = false, children, ...
     <div
       data-slot="dialog-footer"
       className={cn(
-        "-mx-6 -mb-6 flex flex-col-reverse gap-2 rounded-b-xl border-t border-white/5 bg-white/[0.02] p-4 sm:flex-row sm:justify-end",
+        "-mx-6 -mb-6 flex flex-col-reverse gap-2 rounded-b-xl border-t border-slate-100 bg-slate-50 p-4 sm:flex-row sm:justify-end",
         className
       )}
       {...props}
@@ -103,7 +103,7 @@ export function DialogDescription({ className, ...props }) {
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
-      className={cn("text-sm text-white/50", className)}
+      className={cn("text-sm text-slate-500", className)}
       {...props}
     />
   )
