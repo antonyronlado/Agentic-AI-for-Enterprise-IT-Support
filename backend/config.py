@@ -1,18 +1,11 @@
-"""
-Set HuggingFace and SentenceTransformers cache dirs to a local
-project path that contains no spaces (avoids Windows path issues).
-This module must be imported FIRST in main.py before any ML imports.
-"""
 import os
 import sys
 from pathlib import Path
 
-# Force UTF-8 output on Windows consoles
 if sys.stdout and hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 if sys.stderr and hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-
 
 PROJECT_ROOT = Path(__file__).parent.parent
 HF_CACHE_DIR = PROJECT_ROOT / "hf_cache"

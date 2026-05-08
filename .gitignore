@@ -9,15 +9,18 @@ coverage/
 
 # Python
 env/
-__pycache__/
+**/__pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
 
-# FAISS index (auto-generated on first run)
+# FAISS index & auto-generated runtime data (rebuilt on first run)
 backend/faiss_index/
+backend/faiss_index/learned_entries.json
 
 # HuggingFace model cache (large files, auto-downloaded)
 hf_cache/
 
+# Runtime / debug artefacts
+metadata.json

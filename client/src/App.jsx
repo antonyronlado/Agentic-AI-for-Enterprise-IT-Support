@@ -14,7 +14,6 @@ function DashboardRouter() {
 }
 
 export default function App() {
-  console.log("App component is rendering");
   return (
     <AuthProvider>
       <DashboardRouter />

@@ -1,3 +1,6 @@
+import asyncio
+
+
 SECURITY_KEYWORDS = [
     "malware", "ransomware", "virus", "phishing", "breach", "hack",
     "unauthorized", "admin", "root", "sudo", "privilege escalation",
@@ -29,49 +32,75 @@ class RiskAgent:
     ) -> dict:
         text = f"{title} {description}".lower()
 
-        sec_hits = sum(1 for kw in SECURITY_KEYWORDS if kw in text)
+        sec_hits  = sum(1 for kw in SECURITY_KEYWORDS  if kw in text)
         comp_hits = sum(1 for kw in COMPLIANCE_KEYWORDS if kw in text)
-        crit_hits = sum(1 for kw in CRITICAL_KEYWORDS if kw in text)
+        crit_hits = sum(1 for kw in CRITICAL_KEYWORDS   if kw in text)
 
-        security_risk = sec_hits > 0
-        compliance_check = comp_hits == 0  # True = passed (no compliance flags found)
+        security_risk    = sec_hits > 0
+        compliance_check = comp_hits == 0
 
         p_weight = PRIORITY_WEIGHTS.get(priority, 0.4)
         raw = (
-            p_weight * 0.40
-            + min(sec_hits / 3, 1.0) * 0.35
-            + min(crit_hits / 2, 1.0) * 0.15
-            + min(comp_hits / 2, 1.0) * 0.10
+            p_weight                      * 0.40
+            + min(sec_hits  / 3, 1.0)    * 0.35
+            + min(crit_hits / 2, 1.0)    * 0.15
+            + min(comp_hits / 2, 1.0)    * 0.10
         )
         risk_score = round(min(raw, 1.0), 3)
 
-        if risk_score >= 0.70:
-            impact = "high"
-        elif risk_score >= 0.40:
-            impact = "medium"
+        if risk_score >= 0.70 or security_risk:
+            risk_level = "high"
+        elif risk_score >= 0.40 or comp_hits > 0:
+            risk_level = "medium"
         else:
-            impact = "low"
+            risk_level = "low"
 
-        notes = self._build_notes(sec_hits, comp_hits, crit_hits)
+        if risk_level == "high":
+            confidence_score = int(min(100, 60 + round(risk_score * 40)))
+        elif risk_level == "medium":
+            confidence_score = int(50 + round(abs(risk_score - 0.55) * 80))
+            confidence_score = min(85, confidence_score)
+        else:
+            confidence_score = int(min(100, 70 + round((0.40 - risk_score) * 75)))
+
+        notes = self._build_notes(sec_hits, comp_hits, crit_hits, risk_level)
 
         return {
-            "impact": impact,
-            "securityRisk": security_risk,
-            "complianceCheck": compliance_check,
-            "notes": notes,
-            "riskScore": risk_score,
+            "risk_level":       risk_level,
+            "confidence_score": confidence_score,
+            "impact":           risk_level,
+            "riskScore":        risk_score,
+            "securityRisk":     security_risk,
+            "complianceCheck":  compliance_check,
+            "notes":            notes,
         }
 
-    def _build_notes(self, sec_hits: int, comp_hits: int, crit_hits: int) -> str:
+    def _build_notes(self, sec_hits, comp_hits, crit_hits, risk_level):
         parts = []
         if sec_hits:
-            parts.append(f"Security indicators detected ({sec_hits} keyword(s)).")
-        if comp_hits:
-            parts.append("Compliance flags present — manual review required.")
-        if crit_hits:
-            parts.append("High business-impact language detected.")
-        if not parts:
             parts.append(
-                "No elevated risk indicators. Ticket eligible for automated resolution."
+                f"Security indicators detected ({sec_hits} keyword(s)). "
+                "Immediate admin review required."
             )
+        if comp_hits:
+            parts.append(
+                "Compliance flags present — manual review and regulatory "
+                "assessment required before resolution."
+            )
+        if crit_hits:
+            parts.append(
+                "High business-impact language detected. "
+                "Potential service-disruption event."
+            )
+        if not parts:
+            if risk_level == "low":
+                parts.append(
+                    "No elevated risk indicators detected. "
+                    "Ticket eligible for automated resolution via knowledge base."
+                )
+            else:
+                parts.append(
+                    "Moderate risk indicators. "
+                    "Guided resolution recommended with agent oversight."
+                )
         return " ".join(parts)

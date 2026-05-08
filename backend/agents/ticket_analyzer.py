@@ -19,7 +19,7 @@ class TicketAnalyzerAgent:
 
     async def run(self, title: str, description: str) -> dict:
         text = f"{title}. {description}".strip()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         cat_result, pri_result = await asyncio.gather(
             loop.run_in_executor(None, self._classify, text, CATEGORY_LABELS),

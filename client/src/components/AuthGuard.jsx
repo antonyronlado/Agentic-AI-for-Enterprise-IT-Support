@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+﻿import { createContext, useContext, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Shield, LogIn, Cpu, Zap, UserPlus } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -20,7 +20,6 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   
-  // Auth Form State
   const [isRegistering, setIsRegistering] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');

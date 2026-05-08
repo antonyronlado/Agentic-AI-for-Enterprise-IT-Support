@@ -2,152 +2,183 @@ import { useEffect, useState } from 'react';
 import { useAuth } from './AuthGuard';
 import { getTickets, updateTicket, getLogs } from '../services/aiEngine';
 import { TicketCard } from './TicketCard';
-import { assessRisk, resolveTicket } from '../services/aiEngine';
+import { AnalysisSection, RiskSummaryCard, RiskAssessmentPanel } from './AnalysisSection';
+import { StatusBadge } from './StatusBadge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import {
-  ShieldCheck, Cpu, AlertTriangle, CheckCircle, Activity,
-  Users, LayoutDashboard, LogOut, Shield, Clock, ChevronRight,
-  TrendingUp, Zap, Brain, TerminalSquare
+  Activity, LogOut, Shield, Brain, TerminalSquare,
+  LayoutDashboard, CheckCircle, BookPlus, AlertOctagon,
+  XCircle, Clock, CheckCircle2, Zap,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-const riskColors = {
-  low: { bg: 'bg-emerald-50/50', border: 'border-emerald-100', text: 'text-emerald-600', badge: 'bg-emerald-100 border-emerald-200 text-emerald-700' },
-  medium: { bg: 'bg-amber-50/50', border: 'border-amber-100', text: 'text-amber-600', badge: 'bg-amber-100 border-amber-200 text-amber-700' },
-  high: { bg: 'bg-red-50/50', border: 'border-red-100', text: 'text-red-600', badge: 'bg-red-100 border-red-200 text-red-700' },
-};
+const API_URL = import.meta.env.VITE_AI_ENGINE_URL || 'http://localhost:8000';
 
+async function learnFromTicket(ticket, resolution) {
+  const res = await fetch(`${API_URL}/learn`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ticket_id:   ticket._id || ticket.id,
+      title:       ticket.title,
+      description: ticket.description,
+      steps:       resolution?.steps || [],
+      result:      resolution?.result || 'Resolved.',
+      category:    ticket.category || 'other',
+    }),
+  });
+  return res.json();
+}
 
+function isSlaWarning(ticket) {
+  const diffMin = Math.floor((Date.now() - ticket.updatedAt) / 60000);
+  if (ticket.status === 'open'        && diffMin > 30)  return true;
+  if (ticket.status === 'in_progress' && diffMin > 240) return true;
+  return false;
+}
 
 function TimelineEvent({ event }) {
   return (
     <div className="relative pl-7">
-      <div className="absolute left-0 top-1 w-3.5 h-3.5 rounded-full bg-white border-2 border-primary z-10" />
+      <div className="absolute left-0 top-1 w-3 h-3 rounded-full bg-white border-2 border-primary z-10" />
       <p className="text-[9px] font-mono text-slate-400">{new Date(event.timestamp).toLocaleTimeString()}</p>
-      <p className="text-[10px] font-bold uppercase text-primary">{event.status?.replace('_', ' ')}</p>
+      <p className="text-[10px] font-bold uppercase text-primary">{event.status?.replace(/_/g, ' ')}</p>
       <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">{event.message}</p>
+    </div>
+  );
+}
+
+function HeaderStat({ label, value, color }) {
+  return (
+    <div className="text-center px-3 border-l border-slate-200 first:border-l-0">
+      <p className={`text-base font-black leading-none ${color}`}>{value}</p>
+      <p className="text-[8px] font-mono text-slate-400 uppercase tracking-wider mt-0.5">{label}</p>
     </div>
   );
 }
 
 export function AgentDashboard() {
   const { profile, signOut } = useAuth();
-  const [tickets, setTickets] = useState([]);
-  const [selectedTicket, setSelectedTicket] = useState(null);
-  const [processing, setProcessing] = useState(null);
-  const [activeTab, setActiveTab] = useState('description');
-  const [viewMode, setViewMode] = useState('tickets'); // 'tickets' or 'logs'
-  const [logs, setLogs] = useState([]);
+  const [tickets, setTickets]         = useState([]);
+  const [selectedTicket, setSelected] = useState(null);
+  const [activeTab, setActiveTab]     = useState('ai_analysis');
+  const [viewMode, setViewMode]       = useState('tickets');
+  const [logs, setLogs]               = useState([]);
+  const [resolving, setResolving]     = useState(null);
 
   const fetchTickets = async () => {
-    if (viewMode !== 'tickets') return;
     try {
-      const data = await getTickets(null, profile?.role || "admin");
+      const data = await getTickets(null, 'admin');
       setTickets(data);
       if (selectedTicket) {
-        const updated = data.find(t => (t._id || t.id) === (selectedTicket._id || selectedTicket.id));
-        if (updated) setSelectedTicket(updated);
+        const up = data.find(t => (t._id || t.id) === (selectedTicket._id || selectedTicket.id));
+        if (up) setSelected(up);
       }
-    } catch (error) {
-      console.error(error);
-      toast.error('Failed to load tickets');
-    }
+    } catch { toast.error('Failed to load tickets'); }
   };
 
-  const fetchLogsData = async () => {
-    try {
-      const data = await getLogs();
-      setLogs(data);
-    } catch (error) {
-      console.error(error);
-      toast.error('Failed to load logs');
-    }
+  const fetchLogs = async () => {
+    try { setLogs(await getLogs(150)); } catch { toast.error('Failed to load logs'); }
   };
 
   useEffect(() => {
     if (viewMode === 'tickets') {
       fetchTickets();
-      const interval = setInterval(fetchTickets, 5000);
-      return () => clearInterval(interval);
-    } else if (viewMode === 'logs') {
-      fetchLogsData();
-      const interval = setInterval(fetchLogsData, 5000);
-      return () => clearInterval(interval);
+      const iv = setInterval(fetchTickets, 5000);
+      return () => clearInterval(iv);
+    } else {
+      fetchLogs();
+      const iv = setInterval(fetchLogs, 5000);
+      return () => clearInterval(iv);
     }
   }, [viewMode]);
 
-  const handleProcessTicket = async (ticket) => {
-    const tId = ticket._id || ticket.id;
-    setProcessing(tId);
-    const toastId = toast.loading(`Agentic AI processing #${tId.slice(0, 8)}...`);
-
+  const handleMarkResolved = async () => {
+    if (!selectedTicket) return;
+    const tId = selectedTicket._id || selectedTicket.id;
+    setResolving(tId);
     try {
-      toast.loading('Risk assessment running...', { id: toastId });
-      const risk = await assessRisk(ticket);
-
-      toast.loading('Generating resolution path...', { id: toastId });
-      const resolution = await resolveTicket({ ...ticket, riskAssessment: risk });
-
-      const nextStatus = resolution.automated ? 'resolved' : 'resolving';
-
       await updateTicket(tId, {
-        status: nextStatus,
-        riskAssessment: risk,
-        resolution,
+        status: 'resolved',
         updatedAt: Date.now(),
-        history: [...(ticket.history || []), {
-          timestamp: Date.now(),
-          status: nextStatus,
-          message: `Agentic AI: ${resolution.automated ? 'Automatically resolved' : 'Resolution path proposed'}. Risk impact: ${risk.impact}. Score: ${risk.riskScore ?? 'N/A'}`
-        }]
+        history: [...(selectedTicket.history || []), {
+          timestamp: Date.now(), status: 'resolved',
+          message: 'Agent manually verified and marked as resolved.',
+        }],
       });
-
-      toast.success(resolution.automated ? 'Ticket auto-resolved!' : 'Resolution path proposed.', { id: toastId });
+      toast.success('Ticket marked as resolved');
       fetchTickets();
-    } catch (error) {
-      console.error(error);
-      toast.error('AI processing failed', { id: toastId });
-    } finally {
-      setProcessing(null);
-    }
+    } catch { toast.error('Failed to resolve ticket'); }
+    finally { setResolving(null); }
+  };
+
+  const handleLearnFromTicket = async (t) => {
+    try {
+      const result = await learnFromTicket(t, t.resolution);
+      if (result.added) toast.success(`Added to KB! Total entries: ${result.total_entries}`);
+      else toast.info('Already in knowledge base.');
+    } catch { toast.error('Failed to add to KB'); }
   };
 
   const counts = {
-    open: tickets.filter(t => t.status === 'open').length,
-    analyzing: tickets.filter(t => t.status === 'analyzing').length,
-    critical: tickets.filter(t => t.priority === 'critical').length,
-    resolved: tickets.filter(t => t.status === 'resolved').length,
+    open:      tickets.filter(t => t.status === 'open').length,
+    active:    tickets.filter(t => t.status === 'in_progress').length,
+    escalated: tickets.filter(t => t.status === 'escalated').length,
+    resolved:  tickets.filter(t => t.status === 'resolved').length,
+    failed:    tickets.filter(t => t.status === 'failed').length,
+    sla:       tickets.filter(isSlaWarning).length,
   };
 
-  return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      <div className="absolute inset-0 technical-grid opacity-[0.15] pointer-events-none" />
+  const ticket    = selectedTicket;
+  const risk      = ticket?.riskAssessment;
+  const riskLevel = ticket?.risk_level || risk?.risk_level || risk?.impact || 'low';
 
-      <header className="relative z-50 border-b border-slate-200 bg-white/80 backdrop-blur-xl sticky top-0 shadow-sm">
+  return (
+    <div className="min-h-screen bg-[#f5f5f7] flex flex-col">
+      <div className="absolute inset-0 technical-grid pointer-events-none" />
+
+      {/* ── Header ─────────────────────────────────────────── */}
+      <header className="relative z-50 border-b border-black/[0.06] bg-white/90 backdrop-blur-xl sticky top-0 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
         <div className="max-w-[1800px] mx-auto px-5 h-14 flex items-center justify-between gap-6">
+
           <div className="flex items-center gap-3 shrink-0">
-            <div className="relative">
-              <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center">
-                <Activity className="w-4 h-4 text-primary" />
-              </div>
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-md shadow-indigo-500/25">
+              <Activity className="w-4 h-4 text-white" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-sm font-black tracking-tight text-slate-900 uppercase">Agentic Command</h1>
-                <span className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 border border-indigo-200 uppercase tracking-wider">Operational</span>
+                <h1 className="text-sm font-black tracking-tight text-slate-900 uppercase">Command Center</h1>
+                <span className="text-[8px] font-mono px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 uppercase">
+                  Live
+                </span>
               </div>
-              <p className="text-[8px] font-mono text-slate-500 uppercase tracking-widest">NexusDesk Intelligence Platform</p>
+              <p className="text-[8px] font-mono text-slate-400 uppercase tracking-widest">NexusDesk Intelligence Platform</p>
             </div>
           </div>
 
+          {/* Stats in header */}
+          <div className="hidden md:flex items-center">
+            <HeaderStat label="Open"      value={counts.open}      color="text-blue-600" />
+            <HeaderStat label="Active"    value={counts.active}    color="text-amber-600" />
+            <HeaderStat label="Escalated" value={counts.escalated} color="text-red-600" />
+            <HeaderStat label="Resolved"  value={counts.resolved}  color="text-emerald-600" />
+            {counts.sla > 0 && (
+              <div className="ml-3 pl-3 border-l border-slate-200">
+                <span className="inline-flex items-center gap-1 text-[9px] font-mono uppercase px-2 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200 animate-pulse">
+                  <Clock className="w-2.5 h-2.5" /> {counts.sla} SLA
+                </span>
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center gap-3 shrink-0">
-            <div className="text-right">
+            <div className="text-right hidden sm:block">
               <p className="text-xs font-bold text-slate-900">{profile?.displayName}</p>
-              <p className="text-[8px] font-mono text-primary/80 uppercase tracking-wider">Agent L3</p>
+              <p className="text-[8px] font-mono text-primary/80 uppercase tracking-wider">{profile?.role}</p>
             </div>
-            <Button variant="ghost" size="icon-sm" onClick={signOut} className="text-slate-400 hover:text-red-500">
+            <Button variant="ghost" size="icon-sm" onClick={signOut} className="text-slate-400 hover:text-red-500 hover:bg-red-50">
               <LogOut className="w-4 h-4" />
             </Button>
           </div>
@@ -155,369 +186,306 @@ export function AgentDashboard() {
       </header>
 
       <div className="relative flex-1 flex overflow-hidden max-w-[1800px] mx-auto w-full">
-        <aside className="w-14 border-r border-slate-200 bg-white flex flex-col items-center py-5 gap-4 sticky top-14 h-[calc(100vh-3.5rem)]">
-          <Button 
-            variant="ghost" 
-            size="icon-sm" 
-            className={viewMode === 'tickets' ? "text-primary bg-indigo-50" : "text-slate-400 hover:text-slate-900"}
-            onClick={() => setViewMode('tickets')}
-          >
-            <LayoutDashboard className="w-4 h-4" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="icon-sm" 
-            className={viewMode === 'logs' ? "text-primary bg-indigo-50" : "text-slate-400 hover:text-slate-900"}
-            onClick={() => setViewMode('logs')}
-          >
-            <TerminalSquare className="w-4 h-4" />
-          </Button>
+
+        {/* ── Sidebar nav ──────────────────────────────────── */}
+        <aside className="w-14 border-r border-black/[0.06] bg-white/80 flex flex-col items-center py-5 gap-3 sticky top-14 h-[calc(100vh-3.5rem)]">
+          {[
+            { mode: 'tickets', Icon: LayoutDashboard },
+            { mode: 'logs',    Icon: TerminalSquare },
+          ].map(({ mode, Icon }) => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                viewMode === mode
+                  ? 'bg-indigo-50 text-primary shadow-sm'
+                  : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+              }`}
+              title={mode.charAt(0).toUpperCase() + mode.slice(1)}
+            >
+              <Icon className="w-4 h-4" />
+            </button>
+          ))}
           <div className="mt-auto">
-            <Button variant="ghost" size="icon-sm" className="text-slate-400 hover:text-red-500" onClick={signOut}>
+            <button
+              onClick={signOut}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
+            >
               <LogOut className="w-4 h-4" />
-            </Button>
+            </button>
           </div>
         </aside>
 
         {viewMode === 'tickets' ? (
-        <>
-        <div className="w-72 border-r border-slate-200 bg-white flex flex-col overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
-            <p className="text-[9px] font-mono uppercase tracking-widest text-slate-500">Active Queue</p>
-            <p className="text-sm font-bold text-slate-900 mt-0.5">{tickets.length} Tickets</p>
-          </div>
-          <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            <AnimatePresence>
-              {tickets.map(ticket => (
-                <TicketCard
-                  key={ticket._id || ticket.id}
-                  ticket={ticket}
-                  onClick={() => { setSelectedTicket(ticket); setActiveTab('description'); }}
-                />
-              ))}
-            </AnimatePresence>
-          </div>
-        </div>
-
-        <main className="flex-1 overflow-y-auto p-6">
-          {selectedTicket ? (
-            <motion.div
-              key={selectedTicket._id || selectedTicket.id}
-              initial={{ opacity: 0, x: 16 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.25 }}
-              className="max-w-4xl mx-auto space-y-5"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-2 flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[9px] font-mono text-slate-400 uppercase">#{(selectedTicket._id || selectedTicket.id).slice(0, 8)}</span>
-                    <span className="text-[9px] font-mono uppercase px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 border border-indigo-200">
-                      {selectedTicket.category}
-                    </span>
-                    <span className="text-[9px] font-mono uppercase px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-slate-200">
-                      {selectedTicket.priority}
-                    </span>
-                  </div>
-                  <h2 className="text-xl font-black tracking-tight text-slate-900">{selectedTicket.title}</h2>
-                </div>
-
-                <div className="flex gap-2 shrink-0">
-                  {selectedTicket.status === 'resolving' && (
-                    <Button
-                      onClick={async () => {
-                        const tId = selectedTicket._id || selectedTicket.id;
-                        setProcessing(tId);
-                        try {
-                          await updateTicket(tId, { 
-                            status: 'resolved',
-                            updatedAt: Date.now(),
-                            history: [...(selectedTicket.history || []), {
-                              timestamp: Date.now(),
-                              status: 'resolved',
-                              message: 'Agent manually verified and resolved the ticket.'
-                            }]
-                          });
-                          toast.success("Ticket successfully marked as resolved!");
-                          fetchTickets();
-                        } catch (error) {
-                          toast.error("Failed to resolve ticket");
-                        } finally {
-                          setProcessing(null);
-                        }
-                      }}
-                      disabled={processing === (selectedTicket._id || selectedTicket.id)}
-                      className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold shadow-lg shadow-emerald-500/20 h-9 px-4"
-                    >
-                      <CheckCircle className="w-3.5 h-3.5 mr-2" />
-                      Mark as Resolved
-                    </Button>
-                  )}
-                  <Button
-                    onClick={() => handleProcessTicket(selectedTicket)}
-                    disabled={processing === (selectedTicket._id || selectedTicket.id) || selectedTicket.status === 'resolved'}
-                    className="bg-primary hover:bg-primary/80 text-white font-bold shadow-lg shadow-primary/20 h-9 px-4"
-                  >
-                    {processing === (selectedTicket._id || selectedTicket.id) ? (
-                      <>
-                        <Activity className="w-3.5 h-3.5 animate-spin mr-2" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <Cpu className="w-3.5 h-3.5 mr-2" />
-                        Run Agentic AI
-                      </>
-                    )}
-                  </Button>
-                </div>
+          <>
+            {/* ── Ticket Queue ─────────────────────────────── */}
+            <div className="w-80 border-r border-black/[0.06] bg-white/60 flex flex-col overflow-hidden sticky top-14 h-[calc(100vh-3.5rem)]">
+              <div className="px-4 py-3 border-b border-black/[0.06] bg-white/80">
+                <p className="text-[9px] font-mono uppercase tracking-widest text-slate-500">Ticket Queue</p>
+                <p className="text-sm font-bold text-slate-900 mt-0.5">{tickets.length} Total</p>
               </div>
-
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList>
-                  <TabsTrigger value="description">Description</TabsTrigger>
-                  <TabsTrigger value="analysis">
-                    AI Analysis
-                    {selectedTicket.analysis && <span className="ml-1 w-1 h-1 rounded-full bg-primary inline-block" />}
-                  </TabsTrigger>
-                  <TabsTrigger value="resolution">
-                    Resolution
-                    {selectedTicket.resolution && <span className="ml-1 w-1 h-1 rounded-full bg-emerald-400 inline-block" />}
-                  </TabsTrigger>
-                  <TabsTrigger value="risk">
-                    Risk
-                    {selectedTicket.riskAssessment?.securityRisk && <span className="ml-1 w-1 h-1 rounded-full bg-red-400 inline-block" />}
-                  </TabsTrigger>
-                  <TabsTrigger value="timeline">Timeline</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="description" className="mt-4">
-                  <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <p className="text-sm text-slate-700 leading-relaxed">{selectedTicket.description}</p>
+              <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                <AnimatePresence>
+                  {tickets.map(t => (
+                    <TicketCard
+                      key={t._id || t.id}
+                      ticket={t}
+                      role="admin"
+                      isSelected={(selectedTicket?._id || selectedTicket?.id) === (t._id || t.id)}
+                      onClick={() => { setSelected(t); setActiveTab('ai_analysis'); }}
+                    />
+                  ))}
+                </AnimatePresence>
+                {tickets.length === 0 && (
+                  <div className="py-16 text-center">
+                    <Activity className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+                    <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">No tickets</p>
                   </div>
-                </TabsContent>
-
-                <TabsContent value="analysis" className="mt-4">
-                  {selectedTicket.analysis ? (
-                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Brain className="w-4 h-4 text-primary" />
-                          <span className="text-xs font-mono uppercase text-primary tracking-wider">NLP Analysis Result</span>
-                        </div>
-                        {selectedTicket.analysis.confidenceScore !== undefined && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-[9px] font-mono text-white/30 uppercase">Confidence</span>
-                            <div className="flex items-center gap-1.5">
-                              <div className="w-20 h-1.5 rounded-full bg-white/10 overflow-hidden">
-                                <div
-                                  className="h-full rounded-full bg-primary"
-                                  style={{ width: `${Math.round(selectedTicket.analysis.confidenceScore * 100)}%` }}
-                                />
-                              </div>
-                              <span className="text-xs font-mono text-primary font-bold">
-                                {Math.round(selectedTicket.analysis.confidenceScore * 100)}%
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <p className="text-[9px] font-mono uppercase text-indigo-400">Detected Intent</p>
-                          <p className="text-sm font-semibold text-indigo-900">{selectedTicket.analysis.intent}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-[9px] font-mono uppercase text-indigo-400">Summary</p>
-                          <p className="text-sm text-indigo-700">{selectedTicket.analysis.summary}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-[9px] font-mono uppercase text-indigo-400">Suggested Priority</p>
-                          <span className="inline-block text-[10px] font-mono uppercase px-2 py-0.5 rounded-md bg-white/50 text-indigo-600 border border-indigo-100">
-                            {selectedTicket.analysis.suggestedPriority}
-                          </span>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-[9px] font-mono uppercase text-indigo-400">Category</p>
-                          <span className="inline-block text-[10px] font-mono uppercase px-2 py-0.5 rounded-md bg-white/50 text-indigo-600 border border-indigo-100">
-                            {selectedTicket.analysis.suggestedCategory}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-slate-200 bg-white p-10 text-center shadow-sm">
-                      <Brain className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-                      <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Run Agentic AI to see analysis</p>
-                    </div>
-                  )}
-                </TabsContent>
-
-                <TabsContent value="resolution" className="mt-4">
-                  {selectedTicket.resolution ? (
-                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-5 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle className="w-4 h-4 text-emerald-400" />
-                          <span className="text-xs font-mono uppercase text-emerald-400 tracking-wider">Resolution Path</span>
-                        </div>
-                        <span className={`text-[9px] font-mono uppercase px-2 py-0.5 rounded-md border ${selectedTicket.resolution.automated
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                            : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                          }`}>
-                          {selectedTicket.resolution.automated ? '⚡ Auto-Resolved' : '👤 Escalated'}
-                        </span>
-                      </div>
-
-                      {selectedTicket.resolution.escalationReason && (
-                        <div className="rounded-lg bg-amber-500/5 border border-amber-500/10 px-3 py-2">
-                          <p className="text-[9px] font-mono uppercase text-amber-400/60 mb-1">Escalation Reason</p>
-                          <p className="text-xs text-amber-300/70">{selectedTicket.resolution.escalationReason}</p>
-                        </div>
-                      )}
-
-                      <ol className="space-y-2">
-                        {selectedTicket.resolution.steps?.map((step, i) => (
-                          <li key={i} className="flex gap-3 text-sm">
-                            <span className="text-emerald-500 font-mono text-xs shrink-0 pt-0.5">{String(i + 1).padStart(2, '0')}.</span>
-                            <span className="text-emerald-800 leading-relaxed">{step}</span>
-                          </li>
-                        ))}
-                      </ol>
-
-                      {selectedTicket.resolution.result && (
-                        <div className="pt-3 border-t border-emerald-500/10">
-                          <p className="text-[9px] font-mono uppercase text-emerald-600/50 mb-1">Result</p>
-                          <p className="text-xs text-emerald-800/70">{selectedTicket.resolution.result}</p>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-slate-200 bg-white p-10 text-center shadow-sm">
-                      <CheckCircle className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-                      <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">No resolution yet</p>
-                    </div>
-                  )}
-                </TabsContent>
-
-                <TabsContent value="risk" className="mt-4">
-                  {selectedTicket.riskAssessment ? (() => {
-                    const r = riskColors[selectedTicket.riskAssessment.impact] || riskColors.low;
-                    const score = selectedTicket.riskAssessment.riskScore;
-                    return (
-                      <div className={`rounded-xl border p-5 space-y-4 ${r.bg} ${r.border}`}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <ShieldCheck className={`w-4 h-4 ${r.text}`} />
-                            <span className={`text-xs font-mono uppercase tracking-wider ${r.text}`}>Risk Assessment</span>
-                          </div>
-                          {score !== undefined && (
-                            <div className="flex items-center gap-2">
-                              <span className="text-[9px] font-mono text-slate-500 uppercase">Risk Score</span>
-                              <div className="flex items-center gap-1.5">
-                                <div className="w-16 h-1.5 rounded-full bg-slate-200 overflow-hidden">
-                                  <div
-                                    className={`h-full rounded-full ${score > 0.7 ? 'bg-red-500' : score > 0.4 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                                    style={{ width: `${Math.round(score * 100)}%` }}
-                                  />
-                                </div>
-                                <span className={`text-xs font-mono font-bold ${r.text}`}>{Math.round(score * 100)}%</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
-                            <p className="text-[9px] font-mono uppercase text-slate-500 mb-1">Impact Level</p>
-                            <span className={`text-xs font-mono uppercase font-bold ${r.text}`}>
-                              {selectedTicket.riskAssessment.impact}
-                            </span>
-                          </div>
-                          <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
-                            <p className="text-[9px] font-mono uppercase text-slate-500 mb-1">Security Risk</p>
-                            <span className={`text-xs font-mono uppercase font-bold ${selectedTicket.riskAssessment.securityRisk ? 'text-red-600' : 'text-emerald-600'
-                              }`}>
-                              {selectedTicket.riskAssessment.securityRisk ? '⚠ Detected' : '✓ Clear'}
-                            </span>
-                          </div>
-                          <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
-                            <p className="text-[9px] font-mono uppercase text-slate-500 mb-1">Compliance</p>
-                            <span className={`text-xs font-mono uppercase font-bold ${selectedTicket.riskAssessment.complianceCheck ? 'text-emerald-600' : 'text-red-600'
-                              }`}>
-                              {selectedTicket.riskAssessment.complianceCheck ? '✓ Passed' : '✗ Failed'}
-                            </span>
-                          </div>
-                        </div>
-
-                        {selectedTicket.riskAssessment.notes && (
-                          <div className="rounded-lg bg-slate-50 border border-slate-200 p-3">
-                            <p className="text-[9px] font-mono uppercase text-slate-500 mb-1.5">Risk Notes</p>
-                            <p className="text-xs text-slate-600 leading-relaxed">{selectedTicket.riskAssessment.notes}</p>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })() : (
-                    <div className="rounded-xl border border-slate-200 bg-white p-10 text-center shadow-sm">
-                      <ShieldCheck className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-                      <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">No risk assessment yet</p>
-                    </div>
-                  )}
-                </TabsContent>
-
-                <TabsContent value="timeline" className="mt-4">
-                  <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <div className="space-y-5 relative before:absolute before:left-[6px] before:top-3 before:bottom-3 before:w-px before:bg-slate-200">
-                      {[...(selectedTicket.history || [])].reverse().map((event, i) => (
-                        <TimelineEvent key={i} event={event} />
-                      ))}
-                    </div>
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </motion.div>
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center min-h-[60vh] text-slate-300">
-              <div>
-                <Activity className="w-16 h-16 mb-4 mx-auto" />
-                <h2 className="text-xl font-black uppercase tracking-wide">Select a Ticket</h2>
-                <p className="font-mono text-xs uppercase tracking-widest mt-2">Choose from the queue to inspect</p>
+                )}
               </div>
             </div>
-          )}
-        </main>
-        </>
+
+            {/* ── Detail panel ─────────────────────────────── */}
+            <main className="flex-1 overflow-y-auto">
+              {ticket ? (
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={ticket._id || ticket.id}
+                    initial={{ opacity: 0, x: 12 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -8 }}
+                    transition={{ duration: 0.25 }}
+                    className="max-w-4xl mx-auto p-6 space-y-5"
+                  >
+                    {/* Ticket header */}
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-2 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[9px] font-mono text-slate-400 uppercase">
+                            #{(ticket._id || ticket.id || '').slice(0, 8)}
+                          </span>
+                          <StatusBadge status={ticket.status} size="md" />
+                          {ticket.category && (
+                            <span className="text-[9px] font-mono uppercase px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 border border-indigo-200">
+                              {ticket.category}
+                            </span>
+                          )}
+                          {ticket.priority && (
+                            <span className="text-[9px] font-mono uppercase px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-slate-200">
+                              {ticket.priority}
+                            </span>
+                          )}
+                        </div>
+                        <h2 className="text-xl font-black tracking-tight text-slate-900">{ticket.title}</h2>
+                        <p className="text-xs text-slate-500">{ticket.userEmail}</p>
+                      </div>
+
+                      <div className="flex flex-col gap-2 shrink-0">
+                        {['in_progress', 'resolving', 'open'].includes(ticket.status) && (
+                          <Button
+                            onClick={handleMarkResolved}
+                            disabled={resolving === (ticket._id || ticket.id)}
+                            className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold shadow-lg shadow-emerald-500/20 h-9 px-4"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5 mr-2" />
+                            Mark Resolved
+                          </Button>
+                        )}
+                        {ticket.status === 'resolved' && ticket.resolution?.steps?.length > 0 && (
+                          <Button
+                            onClick={() => handleLearnFromTicket(ticket)}
+                            variant="outline"
+                            className="h-9 px-4 border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+                          >
+                            <BookPlus className="w-3.5 h-3.5 mr-2" />
+                            Learn from Ticket
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Risk + confidence summary */}
+                    <RiskSummaryCard
+                      risk={risk}
+                      confidenceScore={ticket.confidence_score}
+                      updatedAt={ticket.updatedAt}
+                    />
+
+                    {/* Alerts */}
+                    {ticket.low_confidence && (
+                      <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 flex items-center gap-3">
+                        <AlertOctagon className="w-4 h-4 text-orange-600 shrink-0" />
+                        <div>
+                          <p className="text-xs font-bold text-orange-800">Low AI Confidence</p>
+                          <p className="text-[10px] text-orange-700 mt-0.5">
+                            Score below threshold — auto-escalated for human review. Verify before closing.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {ticket.status === 'failed' && (
+                      <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 flex items-center gap-3">
+                        <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                        <div>
+                          <p className="text-xs font-bold text-rose-800">Pipeline Failed</p>
+                          <p className="text-[10px] text-rose-700 mt-0.5">
+                            AI pipeline failed after retries. Manual investigation required.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sticky tabs */}
+                    <div className="sticky-tabs-bar -mx-6 px-6 pt-1">
+                      <Tabs value={activeTab} onValueChange={setActiveTab}>
+                        <TabsList className="w-full justify-start h-10 bg-transparent border-b border-slate-200/60 rounded-none gap-1 px-0">
+                          {[
+                            { value: 'ai_analysis',    label: 'AI Analysis',     dot: !!ticket.admin_response },
+                            { value: 'employee_view',  label: 'Employee View',   dot: false },
+                            { value: 'risk',           label: 'Risk',            dot: !!risk?.securityRisk },
+                            { value: 'timeline',       label: 'Timeline',        dot: false },
+                          ].map(tab => (
+                            <TabsTrigger
+                              key={tab.value}
+                              value={tab.value}
+                              className="relative text-xs data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none rounded-none pb-2 h-10"
+                            >
+                              {tab.label}
+                              {tab.dot && (
+                                <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-primary inline-block align-middle" />
+                              )}
+                            </TabsTrigger>
+                          ))}
+                        </TabsList>
+
+                        <div className="pt-5">
+                          <AnimatePresence mode="wait">
+                            <TabsContent value="ai_analysis" className="mt-0" forceMount hidden={activeTab !== 'ai_analysis'}>
+                              <motion.div key="ai" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
+                                <AnalysisSection text={ticket.admin_response} riskLevel={riskLevel} />
+                              </motion.div>
+                            </TabsContent>
+
+                            <TabsContent value="employee_view" className="mt-0" forceMount hidden={activeTab !== 'employee_view'}>
+                              <motion.div key="emp" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
+                                <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-3 shadow-sm">
+                                  <div className="flex items-center gap-2">
+                                    <CheckCircle2 className="w-4 h-4 text-slate-400" />
+                                    <p className="text-xs font-mono uppercase text-slate-500 tracking-wider">
+                                      What the employee sees
+                                    </p>
+                                  </div>
+                                  {ticket.employee_response ? (
+                                    <div className="rounded-lg border border-indigo-100 bg-gradient-to-br from-indigo-50/60 to-violet-50/30 p-4">
+                                      <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-line">
+                                        {ticket.employee_response}
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs text-slate-400 font-mono uppercase tracking-wider text-center py-6">
+                                      Pipeline still running…
+                                    </p>
+                                  )}
+                                  {ticket.resolution?.automated && (
+                                    <div className="flex items-center gap-1.5 pt-1">
+                                      <Zap className="w-3 h-3 text-emerald-500" />
+                                      <p className="text-[9px] font-mono text-emerald-600 uppercase tracking-wider">
+                                        Auto-resolved by AI — no agent action required
+                                      </p>
+                                    </div>
+                                  )}
+                                  <p className="text-[9px] font-mono text-slate-400 uppercase tracking-wider pt-1 border-t border-slate-100">
+                                    Admin fields (risk, analysis, confidence) hidden from this view
+                                  </p>
+                                </div>
+                              </motion.div>
+                            </TabsContent>
+
+                            <TabsContent value="risk" className="mt-0" forceMount hidden={activeTab !== 'risk'}>
+                              <motion.div key="risk" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
+                                <RiskAssessmentPanel risk={risk} confidenceScore={ticket.confidence_score} />
+                              </motion.div>
+                            </TabsContent>
+
+                            <TabsContent value="timeline" className="mt-0" forceMount hidden={activeTab !== 'timeline'}>
+                              <motion.div key="tl" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
+                                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                                  {(ticket.history || []).length > 0 ? (
+                                    <div className="space-y-5 relative before:absolute before:left-[6px] before:top-3 before:bottom-3 before:w-px before:bg-gradient-to-b before:from-primary/30 before:to-transparent">
+                                      {[...(ticket.history || [])].reverse().map((ev, i) => (
+                                        <TimelineEvent key={i} event={ev} />
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p className="text-center text-[10px] font-mono text-slate-400 uppercase tracking-widest py-8">
+                                      No timeline events yet
+                                    </p>
+                                  )}
+                                </div>
+                              </motion.div>
+                            </TabsContent>
+                          </AnimatePresence>
+                        </div>
+                      </Tabs>
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center min-h-[60vh] text-center px-8">
+                  <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-5 float">
+                    <Activity className="w-8 h-8 text-slate-300" />
+                  </div>
+                  <h2 className="text-lg font-black text-slate-400 uppercase tracking-wide">Select a Ticket</h2>
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-slate-300 mt-2">
+                    Choose from the queue to inspect
+                  </p>
+                </div>
+              )}
+            </main>
+          </>
         ) : (
+          /* ── Logs view ─────────────────────────────────────── */
           <main className="flex-1 overflow-y-auto p-6 max-w-4xl mx-auto w-full">
             <div className="mb-6 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-black text-slate-900 tracking-tight">System Logs</h2>
-                <p className="text-sm text-slate-500 mt-1">Real-time audit trail of actions</p>
+                <p className="text-sm text-slate-500 mt-1">Structured audit trail — every agent decision recorded</p>
               </div>
-              <Button variant="outline" size="sm" onClick={fetchLogsData}>Refresh Logs</Button>
+              <Button variant="outline" size="sm" onClick={fetchLogs}>Refresh</Button>
             </div>
-            
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="space-y-4">
-                {logs.length > 0 ? logs.map(log => (
-                  <div key={log._id || log.id} className="p-4 rounded-lg bg-slate-50 border border-slate-200">
-                    <div className="flex justify-between items-start mb-2">
-                      <span className="text-[10px] font-mono text-indigo-600 uppercase px-2 py-0.5 rounded bg-indigo-50 border border-indigo-100">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-2">
+              {logs.length > 0 ? logs.map(log => (
+                <motion.div
+                  key={log._id}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-4 rounded-xl bg-slate-50/70 border border-slate-100 space-y-1.5 hover:bg-slate-100/60 transition-colors"
+                >
+                  <div className="flex flex-wrap justify-between items-center gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono text-indigo-600 uppercase px-2 py-0.5 rounded-lg bg-indigo-50 border border-indigo-100">
                         {log.action}
                       </span>
-                      <span className="text-[10px] font-mono text-slate-400">
-                        {new Date(log.timestamp).toLocaleString()}
-                      </span>
+                      {log.agent && log.agent !== 'system' && (
+                        <span className="text-[10px] font-mono text-slate-500 uppercase px-2 py-0.5 rounded-lg bg-slate-100 border border-slate-200">
+                          {log.agent}
+                        </span>
+                      )}
                     </div>
-                    <p className="text-sm text-slate-700">{log.details}</p>
+                    <span className="text-[10px] font-mono text-slate-400">
+                      {new Date(log.timestamp).toLocaleString()}
+                    </span>
                   </div>
-                )) : (
-                  <div className="text-center py-10 text-slate-400 font-mono text-[10px] uppercase tracking-widest">
-                    No logs found
-                  </div>
-                )}
-              </div>
+                  {log.ticket_id && (
+                    <p className="text-[9px] font-mono text-slate-400 uppercase">Ticket: {log.ticket_id.slice(0, 8)}</p>
+                  )}
+                  <p className="text-sm text-slate-700 leading-relaxed">{log.details}</p>
+                </motion.div>
+              )) : (
+                <div className="text-center py-12 text-slate-400 font-mono text-[10px] uppercase tracking-widest">
+                  No logs found
+                </div>
+              )}
             </div>
           </main>
         )}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useAuth } from './AuthGuard';
 import { createTicket } from '../services/aiEngine';
 import { Button } from '@/components/ui/button';

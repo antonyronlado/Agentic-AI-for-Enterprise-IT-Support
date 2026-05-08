@@ -12,13 +12,27 @@ async function fetchAPI(endpoint, options = {}) {
   return res.json();
 }
 
-export function getTickets(userId, role) {
+export function getTickets(userId, role = "user") {
   const query = userId ? `?userId=${userId}&role=${role}` : `?role=${role}`;
   return fetchAPI(`/tickets${query}`);
 }
 
-export function getLogs() {
-  return fetchAPI("/logs");
+export function createTicket(ticketData) {
+  return fetchAPI("/tickets", {
+    method: "POST",
+    body: JSON.stringify(ticketData),
+  });
+}
+
+export function updateTicket(ticketId, updateData) {
+  return fetchAPI(`/tickets/${ticketId}`, {
+    method: "PUT",
+    body: JSON.stringify(updateData),
+  });
+}
+
+export function deleteTicket(ticketId) {
+  return fetchAPI(`/tickets/${ticketId}`, { method: "DELETE" });
 }
 
 export function login(username, password) {
@@ -35,55 +49,8 @@ export function register(username, email, password) {
   });
 }
 
-export function createTicket(ticketData) {
-  return fetchAPI(`/tickets`, {
-    method: "POST",
-    body: JSON.stringify(ticketData),
-  });
-}
-
-export function deleteTicket(ticketId) {
-  return fetchAPI(`/tickets/${ticketId}`, {
-    method: "DELETE",
-  });
-}
-
-export function updateTicket(ticketId, updateData) {
-  return fetchAPI(`/tickets/${ticketId}`, {
-    method: "PUT",
-    body: JSON.stringify(updateData),
-  });
-}
-
-// Keeping original analyze/assess/resolve for backward compatibility if needed, 
-// though tickets are now analyzed on creation.
-export function analyzeTicket(description, title = "") {
-  return fetchAPI("/analyze", { 
-    method: "POST", 
-    body: JSON.stringify({ description, title }) 
-  });
-}
-
-export function assessRisk(ticket) {
-  return fetchAPI("/assess-risk", {
-    method: "POST",
-    body: JSON.stringify({
-      title: ticket.title || "",
-      description: ticket.description || "",
-      category: ticket.category || "other",
-      priority: ticket.priority || "medium",
-    }),
-  });
-}
-
-export function resolveTicket(ticket) {
-  return fetchAPI("/resolve", {
-    method: "POST",
-    body: JSON.stringify({
-      title: ticket.title || "",
-      description: ticket.description || "",
-      analysis: ticket.analysis || null,
-      riskAssessment: ticket.riskAssessment || null,
-    }),
-  });
+export function getLogs(limit = 100, ticketId = null) {
+  const params = new URLSearchParams({ limit });
+  if (ticketId) params.set("ticket_id", ticketId);
+  return fetchAPI(`/logs?${params.toString()}`);
 }
