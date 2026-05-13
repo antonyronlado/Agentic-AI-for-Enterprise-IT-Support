@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { StatusBadge, StatusDot, AIActionLabel } from './StatusBadge';
 import { Button } from '@/components/ui/button';
 import {
-  ChevronDown, Clock, Trash2, MessageSquare, Zap,
-  Ticket as TicketIcon, ArrowRight,
+  ChevronDown, Clock, Trash2, Zap,
+  Ticket as TicketIcon, GitMerge, CheckCircle, AlertTriangle, ThumbsUp, ThumbsDown,
 } from 'lucide-react';
 
 function formatRelativeTime(ts) {
@@ -19,8 +19,68 @@ function formatRelativeTime(ts) {
 // ─────────────────────────────────────────────────────────
 //  Inline detail panel shown when a ticket is expanded
 // ─────────────────────────────────────────────────────────
-function TicketDetailInline({ ticket }) {
+function LinkedIncidentBanner({ ticket }) {
+  const canonicalStatus = ticket.canonical_status || 'in_progress';
+  const etaLabel = ticket.eta_label || 'Under investigation';
+  const workaroundSteps = ticket.workaround_steps || [];
+  const confidence = ticket.dedup_confidence ? Math.round(ticket.dedup_confidence * 100) : null;
+
+  const statusColor =
+    canonicalStatus === 'resolved'  ? 'text-emerald-600 bg-emerald-50 border-emerald-200' :
+    canonicalStatus === 'escalated' ? 'text-red-600 bg-red-50 border-red-200' :
+    'text-amber-600 bg-amber-50 border-amber-200';
+
+  return (
+    <div className="rounded-xl border border-violet-200 bg-violet-50/60 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-violet-100">
+        <GitMerge className="w-3.5 h-3.5 text-violet-600" />
+        <p className="text-[10px] font-bold text-violet-800 uppercase tracking-wider">Linked Incident Detected</p>
+        {confidence && (
+          <span className="ml-auto text-[8px] font-mono px-1.5 py-0.5 rounded bg-violet-100 text-violet-600 border border-violet-200">
+            {confidence}% match
+          </span>
+        )}
+      </div>
+      <div className="px-4 py-3 space-y-3">
+        <p className="text-[10px] text-violet-700">
+          Your issue has been identified as part of an existing incident currently under investigation.
+          You have been automatically subscribed to resolution updates.
+        </p>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-lg bg-white border border-violet-100 px-3 py-2">
+            <p className="text-[8px] font-mono uppercase text-slate-400 tracking-wider mb-0.5">Incident Status</p>
+            <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${statusColor}`}>
+              {canonicalStatus.replace(/_/g, ' ')}
+            </span>
+          </div>
+          <div className="rounded-lg bg-white border border-violet-100 px-3 py-2">
+            <p className="text-[8px] font-mono uppercase text-slate-400 tracking-wider mb-0.5">Estimated Resolution</p>
+            <p className="text-[9px] text-slate-700 font-semibold leading-snug">{etaLabel}</p>
+          </div>
+        </div>
+
+        {workaroundSteps.length > 0 && (
+          <div className="rounded-lg bg-white border border-violet-100 p-3 space-y-1.5">
+            <p className="text-[9px] font-mono uppercase text-slate-400 tracking-wider flex items-center gap-1">
+              <CheckCircle className="w-3 h-3 text-emerald-500" /> Suggested Workaround
+            </p>
+            {workaroundSteps.slice(0, 4).map((step, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="text-[8px] font-mono text-violet-400 mt-0.5 shrink-0">{i + 1}.</span>
+                <span className="text-[10px] text-slate-700 leading-snug">{step}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TicketDetailInline({ ticket, onFeedback }) {
   const statusKey = ticket.status || 'open';
+  const isLinked  = statusKey === 'linked';
 
   return (
     <motion.div
@@ -31,7 +91,6 @@ function TicketDetailInline({ ticket }) {
       className="mt-3 rounded-xl border border-slate-100 bg-slate-50/70 overflow-hidden"
     >
       <div className="px-4 py-3 space-y-3">
-        {/* Description */}
         <div>
           <p className="text-[9px] font-mono uppercase tracking-widest text-slate-400 mb-1.5">Your Request</p>
           <p className="text-sm text-slate-700 leading-relaxed">{ticket.description}</p>
@@ -39,16 +98,36 @@ function TicketDetailInline({ ticket }) {
 
         <div className="section-divider" />
 
-        {/* AI Response */}
-        {ticket.employee_response ? (
-          <div className="rounded-lg border border-indigo-100 bg-gradient-to-br from-indigo-50/80 to-violet-50/40 p-4 space-y-2">
-            <div className="flex items-center gap-1.5">
-              <Zap className="w-3 h-3 text-indigo-500" />
-              <p className="text-[9px] font-mono uppercase tracking-widest text-indigo-600">AI Response</p>
+        {isLinked ? (
+          <LinkedIncidentBanner ticket={ticket} />
+        ) : ticket.employee_response ? (
+          <div className="space-y-3">
+            <div className="rounded-lg border border-indigo-100 bg-gradient-to-br from-indigo-50/80 to-violet-50/40 p-4 space-y-2">
+              <div className="flex items-center gap-1.5">
+                <Zap className="w-3 h-3 text-indigo-500" />
+                <p className="text-[9px] font-mono uppercase tracking-widest text-indigo-600">AI Response</p>
+              </div>
+              <div className="text-sm text-slate-800 leading-relaxed whitespace-pre-line">
+                {ticket.employee_response}
+              </div>
             </div>
-            <div className="text-sm text-slate-800 leading-relaxed whitespace-pre-line">
-              {ticket.employee_response}
-            </div>
+            {statusKey === 'resolved' && onFeedback && (
+              <div className="flex items-center gap-2">
+                <p className="text-[9px] font-mono text-slate-400 uppercase tracking-wider">Was this helpful?</p>
+                <button
+                  onClick={() => onFeedback(ticket._id || ticket.id, 'positive')}
+                  className="flex items-center gap-1 text-[9px] font-mono px-2 py-1 rounded-lg border border-emerald-200 text-emerald-600 hover:bg-emerald-50 transition-colors"
+                >
+                  <ThumbsUp className="w-3 h-3" /> Yes
+                </button>
+                <button
+                  onClick={() => onFeedback(ticket._id || ticket.id, 'negative')}
+                  className="flex items-center gap-1 text-[9px] font-mono px-2 py-1 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+                >
+                  <ThumbsDown className="w-3 h-3" /> No
+                </button>
+              </div>
+            )}
           </div>
         ) : statusKey === 'failed' ? (
           <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-center">
@@ -71,7 +150,6 @@ function TicketDetailInline({ ticket }) {
           </div>
         )}
 
-        {/* Footer timestamps */}
         <p className="text-[9px] font-mono text-slate-400">
           Submitted {new Date(ticket.createdAt).toLocaleString()}
           {' · '}
@@ -85,7 +163,7 @@ function TicketDetailInline({ ticket }) {
 // ─────────────────────────────────────────────────────────
 //  Single timeline row
 // ─────────────────────────────────────────────────────────
-function TimelineItem({ ticket, isExpanded, onToggle, onDelete }) {
+function TimelineItem({ ticket, isExpanded, onToggle, onDelete, onFeedback }) {
   const statusKey = ticket.status || 'open';
   const ticketId  = ticket._id || ticket.id || '';
 
@@ -169,7 +247,7 @@ function TimelineItem({ ticket, isExpanded, onToggle, onDelete }) {
             transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
             className="overflow-hidden px-4"
           >
-            <TicketDetailInline ticket={ticket} />
+            <TicketDetailInline ticket={ticket} onFeedback={onFeedback} />
             <div className="h-4" />
           </motion.div>
         )}
@@ -186,10 +264,11 @@ const FILTERS = [
   { key: 'active',    label: 'Active' },
   { key: 'resolved',  label: 'Resolved' },
   { key: 'escalated', label: 'Escalated' },
+  { key: 'linked',    label: 'Linked' },
 ];
 
 function isActive(ticket) {
-  return !['resolved', 'escalated', 'failed'].includes(ticket.status);
+  return !['resolved', 'escalated', 'failed', 'linked'].includes(ticket.status);
 }
 
 function filterTickets(tickets, key) {
@@ -197,13 +276,17 @@ function filterTickets(tickets, key) {
   if (key === 'active')    return tickets.filter(isActive);
   if (key === 'resolved')  return tickets.filter(t => t.status === 'resolved');
   if (key === 'escalated') return tickets.filter(t => t.status === 'escalated');
+  if (key === 'linked')    return tickets.filter(t => t.status === 'linked');
   return tickets;
 }
+
+
+
 
 // ─────────────────────────────────────────────────────────
 //  Main component
 // ─────────────────────────────────────────────────────────
-export function TicketTimeline({ tickets, onDelete, loading }) {
+export function TicketTimeline({ tickets, onDelete, onFeedback, loading }) {
   const [filter,   setFilter]   = useState('all');
   const [expanded, setExpanded] = useState(null);
 
@@ -259,6 +342,7 @@ export function TicketTimeline({ tickets, onDelete, loading }) {
                   isExpanded={expanded === id}
                   onToggle={() => toggleExpand(id)}
                   onDelete={onDelete}
+                  onFeedback={onFeedback}
                 />
               );
             })

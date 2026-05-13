@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import config
 
 from contextlib import asynccontextmanager
@@ -13,42 +14,60 @@ from agents.escalation_agent import EscalationAgent
 from agents.resolution_agent import ResolutionAgent
 from agents.risk_agent import RiskAgent
 from agents.ticket_analyzer import TicketAnalyzerAgent
+from agents.rca_agent import RCAAgent
+from agents.copilot_agent import CopilotAgent
+from agents.trend_agent import TrendAgent
 from knowledge_base.kb_loader import KnowledgeBaseLoader
 from models.model_loader import ModelLoader
 from routers import tickets, auth, logs
+from routers import incidents, copilot, analytics, automation, multimodal
 from sla_monitor import run_sla_monitor
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(name)s][%(levelname)s] %(message)s",
+)
+logger = logging.getLogger("nexusdesk.main")
 
 _analyzer:         TicketAnalyzerAgent | None = None
 _resolver:         ResolutionAgent     | None = None
 _risk_agent:       RiskAgent           | None = None
 _escalation_agent: EscalationAgent     | None = None
 _kb:               KnowledgeBaseLoader | None = None
+_rca_agent:        RCAAgent            | None = None
+_copilot_agent:    CopilotAgent        | None = None
+_trend_agent:      TrendAgent          | None = None
+_model_loader:     ModelLoader         | None = None
 _sla_task:         asyncio.Task        | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _analyzer, _resolver, _risk_agent, _escalation_agent, _kb, _sla_task
+    global _analyzer, _resolver, _risk_agent, _escalation_agent, _kb
+    global _rca_agent, _copilot_agent, _trend_agent, _model_loader, _sla_task
 
-    print("[NexusDesk] Loading AI models (non-blocking)...")
+    logger.info("Loading AI models...")
     loader = ModelLoader()
+    _model_loader = loader
 
-    print("[NexusDesk] Building knowledge base index...")
+    logger.info("Building knowledge base index...")
     _kb = await asyncio.to_thread(KnowledgeBaseLoader, loader)
 
     _analyzer         = TicketAnalyzerAgent(loader)
     _resolver         = ResolutionAgent(loader, _kb)
     _risk_agent       = RiskAgent()
     _escalation_agent = EscalationAgent()
+    _rca_agent        = RCAAgent(loader)
+    _copilot_agent    = CopilotAgent(loader, _kb)
+    _trend_agent      = TrendAgent()
 
-    print("[NexusDesk] Pre-warming BART classifier (background thread)...")
+    logger.info("Pre-warming BART classifier...")
     await asyncio.to_thread(lambda: loader.classifier)
 
     from database import get_db
     _sla_task = asyncio.create_task(run_sla_monitor(get_db))
-    print("[NexusDesk] SLA Monitor started.")
-
-    print("[NexusDesk] All agents ready. API is live.")
+    logger.info("SLA Monitor started.")
+    logger.info("All agents ready. NexusDesk Enterprise AI-Native IT Operations Platform is live.")
     yield
 
     if _sla_task:
@@ -57,13 +76,13 @@ async def lifespan(app: FastAPI):
             await _sla_task
         except asyncio.CancelledError:
             pass
-    print("[NexusDesk] Shutting down.")
+    logger.info("NexusDesk shutting down.")
 
 
 app = FastAPI(
     title="NexusDesk AI Engine",
-    description="Autonomous agentic AI backend for enterprise IT support.",
-    version="2.1.0",
+    description="Agentic AI Workflow Platform for Enterprise IT Operations.",
+    version="3.0.0",
     lifespan=lifespan,
 )
 
@@ -83,7 +102,7 @@ app.add_middleware(
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    print(f"[ERROR] {request.method} {request.url.path} -> {type(exc).__name__}: {exc}")
+    logger.error("%s %s -> %s: %s", request.method, request.url.path, type(exc).__name__, exc)
     return JSONResponse(
         status_code=500,
         content={"error": type(exc).__name__, "detail": str(exc)},
@@ -97,14 +116,31 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(tickets.router)
 app.include_router(auth.router)
 app.include_router(logs.router)
+app.include_router(incidents.router)
+app.include_router(copilot.router)
+app.include_router(analytics.router)
+app.include_router(automation.router)
+app.include_router(multimodal.router)
 
 
 @app.get("/health", tags=["System"])
 async def health():
     return {
-        "status":   "online",
-        "engine":   "NexusDesk AI v2.1",
-        "features": ["autonomous-pipeline", "dual-response", "sla-monitor", "learning-loop"],
+        "status": "online",
+        "engine": "NexusDesk AI v3.0",
+        "platform": "Enterprise AI-Native IT Operations Platform",
+        "features": [
+            "agentic-orchestration",
+            "ticket-deduplication",
+            "rca-clustering",
+            "explainable-ai",
+            "controlled-automated-remediation",
+            "ai-copilot",
+            "incident-trend-intelligence",
+            "smart-kb-generation",
+            "multimodal-analysis",
+            "feedback-learning-loop",
+        ],
     }
 
 
@@ -112,11 +148,13 @@ class AnalyzeRequest(BaseModel):
     title: Optional[str] = ""
     description: str
 
+
 class RiskRequest(BaseModel):
     title: str
     description: str
     category: Optional[str] = "other"
     priority: Optional[str] = "medium"
+
 
 class ResolveRequest(BaseModel):
     title: str
@@ -127,32 +165,18 @@ class ResolveRequest(BaseModel):
 
 @app.post("/analyze", tags=["Agents"])
 async def analyze(req: AnalyzeRequest):
-    try:
-        return await _analyzer.run(req.title or "", req.description)
-    except Exception as exc:
-        print(f"[/analyze ERROR] {exc}")
-        raise
+    return await _analyzer.run(req.title or "", req.description)
 
 
 @app.post("/assess-risk", tags=["Agents"])
 async def assess_risk(req: RiskRequest):
-    try:
-        risk = _risk_agent.run(req.title, req.description, req.category, req.priority)
-        return _escalation_agent.apply(risk)
-    except Exception as exc:
-        print(f"[/assess-risk ERROR] {exc}")
-        raise
+    risk = _risk_agent.run(req.title, req.description, req.category, req.priority)
+    return _escalation_agent.apply(risk)
 
 
 @app.post("/resolve", tags=["Agents"])
 async def resolve(req: ResolveRequest):
-    try:
-        return await _resolver.run(
-            req.title, req.description, req.analysis, req.riskAssessment,
-        )
-    except Exception as exc:
-        print(f"[/resolve ERROR] {exc}")
-        raise
+    return await _resolver.run(req.title, req.description, req.analysis, req.riskAssessment)
 
 
 class LearnRequest(BaseModel):
@@ -177,7 +201,7 @@ async def learn_from_ticket(req: LearnRequest):
         category=req.category,
     )
     return {
-        "added":         added,
-        "message":       "Entry added to knowledge base." if added else "Duplicate — entry already exists.",
+        "added": added,
+        "message": "Entry added to knowledge base." if added else "Duplicate — entry already exists.",
         "total_entries": len(_kb.entries),
     }
