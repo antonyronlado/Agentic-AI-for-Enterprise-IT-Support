@@ -1,12 +1,12 @@
-﻿import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Shield, LogIn, Cpu, Zap, UserPlus } from 'lucide-react';
+import { Shield, LogIn, Cpu, Zap, UserPlus, AlertCircle } from 'lucide-react';
 import { motion } from 'motion/react';
-import { login, register } from '../services/aiEngine';
+import { login, register, getMe, setToken } from '../services/aiEngine';
 import { toast } from 'sonner';
 
 const AuthContext = createContext({
-  user: null,
+  user:    null,
   profile: null,
   loading: true,
   isAdmin: false,
@@ -16,68 +16,94 @@ const AuthContext = createContext({
 export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  const [user,    setUser]    = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [email, setEmail] = useState('');
-  const [authLoading, setAuthLoading] = useState(false);
 
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [username,      setUsername]      = useState('');
+  const [password,      setPassword]      = useState('');
+  const [email,         setEmail]         = useState('');
+  const [authLoading,   setAuthLoading]   = useState(false);
+  const [authError,     setAuthError]     = useState('');
+
+  // ── Session restore — ALWAYS validate token server-side ──────────────
   useEffect(() => {
-    const savedUser = localStorage.getItem('nexus_user');
-    if (savedUser) {
-      const parsedUser = JSON.parse(savedUser);
-      setUser(parsedUser);
-      setProfile({
-        uid: parsedUser.uid,
-        email: parsedUser.email,
-        displayName: parsedUser.displayName,
-        role: parsedUser.role,
-      });
-    }
-    setLoading(false);
+    const restore = async () => {
+      const storedToken = localStorage.getItem('nexus_token');
+      if (!storedToken) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // Calls GET /auth/me with the stored token — gets fresh role from DB
+        const freshProfile = await getMe();
+        const userData = {
+          uid:         freshProfile.uid,
+          email:       freshProfile.email,
+          displayName: freshProfile.username,
+          role:        freshProfile.role,   // role comes from server, never localStorage
+        };
+        setUser(userData);
+        setProfile(userData);
+      } catch {
+        // Token invalid or expired — clear everything and force re-login
+        localStorage.removeItem('nexus_token');
+        localStorage.removeItem('nexus_user');
+        setToken(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    restore();
   }, []);
 
   const handleAuth = async (e) => {
     e.preventDefault();
     setAuthLoading(true);
+    setAuthError('');
     try {
       let data;
       if (isRegistering) {
         data = await register(username, email, password);
-        toast.success("Registration successful! Logging in...");
+        toast.success('Registration successful! Logging in...');
       } else {
         data = await login(username, password);
-        toast.success("Login successful!");
+        toast.success('Login successful!');
       }
-      
+
+      // Store the auth token — role is NOT stored in localStorage
+      setToken(data.auth_token);
+
       const userData = {
-        uid: data.uid,
-        email: data.email,
+        uid:         data.uid,
+        email:       data.email,
         displayName: data.username,
-        role: data.role,
+        role:        data.role,   // from server response only
       };
-      
-      localStorage.setItem('nexus_user', JSON.stringify(userData));
+
       setUser(userData);
       setProfile(userData);
     } catch (err) {
-      toast.error(err.message || "Authentication failed");
+      const msg = err.message || 'Authentication failed. Please try again.';
+      setAuthError(msg);
+      toast.error(msg);
     } finally {
       setAuthLoading(false);
     }
   };
 
   const signOut = () => {
-    localStorage.removeItem('nexus_user');
+    localStorage.removeItem('nexus_token');
+    localStorage.removeItem('nexus_user');  // clean up any legacy data
+    setToken(null);
     setUser(null);
     setProfile(null);
     setUsername('');
     setPassword('');
     setEmail('');
+    setAuthError('');
   };
 
   const value = {
@@ -89,6 +115,7 @@ export function AuthProvider({ children }) {
     signOut,
   };
 
+  // ── Loading splash ────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -101,7 +128,7 @@ export function AuthProvider({ children }) {
           </div>
           <div className="space-y-1 text-center">
             <p className="text-sm font-mono text-slate-500 uppercase tracking-[0.2em]">Initializing</p>
-            <p className="text-xs font-mono text-primary/80 uppercase tracking-widest">Secure Session...</p>
+            <p className="text-xs font-mono text-primary/80 uppercase tracking-widest">Verifying Session...</p>
           </div>
           <div className="flex gap-1.5">
             {[0, 1, 2].map((i) => (
@@ -117,6 +144,7 @@ export function AuthProvider({ children }) {
     );
   }
 
+  // ── Login / Register form ─────────────────────────────────────────────
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 overflow-hidden relative">
@@ -173,6 +201,8 @@ export function AuthProvider({ children }) {
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg text-slate-900 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-sm"
                   required
+                  autoComplete="username"
+                  maxLength={100}
                 />
                 {isRegistering && (
                   <input
@@ -182,16 +212,28 @@ export function AuthProvider({ children }) {
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg text-slate-900 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-sm"
                     required
+                    autoComplete="email"
+                    maxLength={200}
                   />
                 )}
                 <input
                   type="password"
-                  placeholder="Password"
+                  placeholder={isRegistering ? 'Password (min 8 characters)' : 'Password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg text-slate-900 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-sm"
                   required
+                  autoComplete={isRegistering ? 'new-password' : 'current-password'}
+                  minLength={isRegistering ? 8 : undefined}
                 />
+
+                {/* Inline error display */}
+                {authError && (
+                  <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                    <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                    <p className="text-xs text-red-700">{authError}</p>
+                  </div>
+                )}
 
                 <Button
                   type="submit"
@@ -199,16 +241,16 @@ export function AuthProvider({ children }) {
                   className="w-full h-12 text-sm font-semibold bg-primary hover:bg-primary/90 text-white transition-all hover:scale-[1.02] active:scale-[0.98] shadow-md shadow-primary/20"
                 >
                   {isRegistering ? <UserPlus className="mr-2 h-4 w-4" /> : <LogIn className="mr-2 h-4 w-4" />}
-                  {authLoading ? "Processing..." : (isRegistering ? "Register" : "Sign In")}
+                  {authLoading ? 'Processing...' : (isRegistering ? 'Register' : 'Sign In')}
                 </Button>
-                
+
                 <div className="text-center">
-                  <button 
-                    type="button" 
-                    onClick={() => setIsRegistering(!isRegistering)}
+                  <button
+                    type="button"
+                    onClick={() => { setIsRegistering(!isRegistering); setAuthError(''); }}
                     className="text-xs text-primary/80 hover:text-primary transition-colors"
                   >
-                    {isRegistering ? "Already have an account? Sign In" : "Need an account? Register"}
+                    {isRegistering ? 'Already have an account? Sign In' : 'Need an account? Register'}
                   </button>
                 </div>
               </form>

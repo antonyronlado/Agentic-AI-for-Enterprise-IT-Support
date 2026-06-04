@@ -24,11 +24,17 @@ function LinkedIncidentBanner({ ticket }) {
   const etaLabel = ticket.eta_label || 'Under investigation';
   const workaroundSteps = ticket.workaround_steps || [];
   const confidence = ticket.dedup_confidence ? Math.round(ticket.dedup_confidence * 100) : null;
+  const employeeResponse = ticket.employee_response || '';
 
   const statusColor =
     canonicalStatus === 'resolved'  ? 'text-emerald-600 bg-emerald-50 border-emerald-200' :
     canonicalStatus === 'escalated' ? 'text-red-600 bg-red-50 border-red-200' :
     'text-amber-600 bg-amber-50 border-amber-200';
+
+  // Extract the actual solution text from employee_response (skip the header line)
+  const solutionText = employeeResponse
+    ? employeeResponse.replace(/^Linked Incident Detected\n/, '').trim()
+    : '';
 
   return (
     <div className="rounded-xl border border-violet-200 bg-violet-50/60 overflow-hidden">
@@ -60,17 +66,33 @@ function LinkedIncidentBanner({ ticket }) {
           </div>
         </div>
 
-        {workaroundSteps.length > 0 && (
+        {/* Show the AI solution — from workaround steps or the full employee response */}
+        {workaroundSteps.length > 0 ? (
           <div className="rounded-lg bg-white border border-violet-100 p-3 space-y-1.5">
             <p className="text-[9px] font-mono uppercase text-slate-400 tracking-wider flex items-center gap-1">
               <CheckCircle className="w-3 h-3 text-emerald-500" /> Suggested Workaround
             </p>
-            {workaroundSteps.slice(0, 4).map((step, i) => (
+            {workaroundSteps.slice(0, 6).map((step, i) => (
               <div key={i} className="flex items-start gap-2">
                 <span className="text-[8px] font-mono text-violet-400 mt-0.5 shrink-0">{i + 1}.</span>
                 <span className="text-[10px] text-slate-700 leading-snug">{step}</span>
               </div>
             ))}
+          </div>
+        ) : solutionText ? (
+          <div className="rounded-lg bg-white border border-indigo-100 p-3 space-y-1.5">
+            <p className="text-[9px] font-mono uppercase text-slate-400 tracking-wider flex items-center gap-1">
+              <Zap className="w-3 h-3 text-indigo-500" /> AI Solution
+            </p>
+            <div className="text-[10px] text-slate-700 leading-relaxed whitespace-pre-line">
+              {solutionText}
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-lg bg-amber-50 border border-amber-100 p-3">
+            <p className="text-[10px] text-amber-700 leading-snug">
+              Our team is actively investigating this incident. A solution will be shared as soon as it is available.
+            </p>
           </div>
         )}
       </div>

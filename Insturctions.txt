@@ -1,0 +1,5 @@
+Backend
+..\env\Scripts\uvicorn main:app --reload
+
+Client
+npm run dev

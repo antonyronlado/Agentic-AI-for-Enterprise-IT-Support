@@ -94,7 +94,7 @@ class AgentOrchestrator:
         await _update({"status": "in_progress"}, "Agentic orchestration workflow started.", "in_progress")
 
         # ── Step 1: Deduplication ──────────────────────────────────
-        dedup_result = await self.dedup.check(title, description, db)
+        dedup_result = await self.dedup.check(title, description, db, exclude_id=ticket_id)
 
         if dedup_result.get("is_duplicate"):
             await self._handle_duplicate(
@@ -276,7 +276,8 @@ class AgentOrchestrator:
         try:
             canonical = await db.tickets.find_one(
                 {"_id": OID(canonical_id)},
-                {"title": 1, "status": 1, "priority": 1, "resolution": 1, "category": 1, "analysis": 1}
+                {"title": 1, "status": 1, "priority": 1, "resolution": 1,
+                 "category": 1, "analysis": 1, "employee_response": 1}
             )
         except Exception:
             pass
@@ -284,6 +285,8 @@ class AgentOrchestrator:
         # Retrieve workaround from the canonical ticket's resolution or KB
         workaround_steps = []
         workaround_source = None
+        canonical_employee_response = (canonical or {}).get("employee_response", "")
+
         if canonical and canonical.get("resolution", {}).get("steps"):
             workaround_steps = canonical["resolution"]["steps"]
             workaround_source = canonical["resolution"].get("kbTitle", "Canonical Incident")
@@ -293,6 +296,13 @@ class AgentOrchestrator:
                 resolution = await self.resolver.run(title, description, analysis_hint, None)
                 workaround_steps = resolution.get("steps", [])
                 workaround_source = resolution.get("kbTitle", "Knowledge Base")
+                # Filter out generic "no match" steps
+                workaround_steps = [
+                    s for s in workaround_steps
+                    if "no matching resolution" not in s.lower()
+                    and "escalate to level" not in s.lower()
+                    and "attach system logs" not in s.lower()
+                ]
             except Exception as exc:
                 logger.warning("Dedup workaround retrieval failed: %s", exc)
 
@@ -309,12 +319,26 @@ class AgentOrchestrator:
         else:
             eta_label = f"Under investigation — estimated {eta_minutes}–{eta_minutes + 10} min"
 
-        # Build structured employee response
+        # Build structured employee response — always include a solution
         workaround_text = ""
         if workaround_steps:
-            steps_list = "\n".join(f"  {i+1}. {s}" for i, s in enumerate(workaround_steps[:4]))
+            steps_list = "\n".join(f"  {i+1}. {s}" for i, s in enumerate(workaround_steps[:6]))
             workaround_text = (
                 f"\n\nSuggested Workaround (from {workaround_source or 'KB'}):\n{steps_list}"
+            )
+        elif canonical_employee_response and canonical_status == "resolved":
+            # The canonical ticket was resolved — share its solution directly
+            workaround_text = (
+                f"\n\nResolution Applied to Original Incident:\n{canonical_employee_response}"
+            )
+        elif canonical_employee_response:
+            # Canonical ticket has an AI response — surface it as context
+            workaround_text = (
+                f"\n\nAI Response from Original Incident:\n"
+                + "\n".join(
+                    f"  {line}" for line in canonical_employee_response.splitlines()
+                    if line.strip()
+                )[:1500]
             )
 
         employee_response = (

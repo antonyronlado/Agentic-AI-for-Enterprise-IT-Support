@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends
 from typing import Optional
 from database import get_db
+from auth_deps import require_auth, require_admin
 import time
 
 router = APIRouter(prefix="/logs", tags=["Logs"])
+
+_MAX_LOG_LIMIT = 500
 
 
 @router.get("")
@@ -11,10 +14,13 @@ async def get_logs(
     limit: int = 100,
     ticket_id: Optional[str] = None,
     db=Depends(get_db),
+    _user=Depends(require_admin),   # admin-only: logs contain sensitive audit data
 ):
+    # Cap limit to prevent memory DoS
+    safe_limit = max(1, min(limit, _MAX_LOG_LIMIT))
     query = {"ticket_id": ticket_id} if ticket_id else {}
     cursor = db.admin_logs.find(query).sort("timestamp", -1)
-    logs = await cursor.to_list(length=limit)
+    logs = await cursor.to_list(length=safe_limit)
     for log in logs:
         log["_id"] = str(log["_id"])
     return logs

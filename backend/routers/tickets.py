@@ -1,39 +1,94 @@
 import asyncio
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import List, Optional, Any
 from datetime import datetime
 from bson import ObjectId
 
 from database import get_db
+from auth_deps import require_auth, require_admin
 
 router = APIRouter(prefix="/tickets", tags=["Tickets"])
 
+_MAX_TITLE_LEN       = 300
+_MAX_DESCRIPTION_LEN = 5000
+_MAX_TICKETS_RETURN  = 200
+
 
 class TicketCreate(BaseModel):
-    title: str
+    title:       str
     description: str
-    userId: str
-    userEmail: str
+    userId:      str
+    userEmail:   str
+
+    @field_validator("title")
+    @classmethod
+    def cap_title(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Title cannot be empty")
+        return v[:_MAX_TITLE_LEN]
+
+    @field_validator("description")
+    @classmethod
+    def cap_description(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Description cannot be empty")
+        return v[:_MAX_DESCRIPTION_LEN]
+
+
+class TicketUpdate(BaseModel):
+    """Strict allow-list of fields that may be updated via the API.
+    Prevents clients from overwriting admin_response, risk data, etc.
+    """
+    status:           Optional[str]  = None
+    priority:         Optional[str]  = None
+    history:          Optional[List[dict]] = None
+    employee_response: Optional[str] = None
+    updatedAt:        Optional[int]  = None
+
+    @field_validator("status")
+    @classmethod
+    def valid_status(cls, v):
+        if v is not None and v not in {
+            "open", "in_progress", "resolved", "escalated", "failed", "linked"
+        }:
+            raise ValueError(f"Invalid status: {v}")
+        return v
+
+    @field_validator("priority")
+    @classmethod
+    def valid_priority(cls, v):
+        if v is not None and v not in {"low", "medium", "high", "critical"}:
+            raise ValueError(f"Invalid priority: {v}")
+        return v
 
 
 class FeedbackRequest(BaseModel):
-    rating: str
+    rating:  str
     comment: Optional[str] = None
+
+    @field_validator("comment")
+    @classmethod
+    def cap_comment(cls, v):
+        if v:
+            return v[:1000]
+        return v
 
 
 class TicketOut(BaseModel):
     id: str = Field(alias="_id")
-    title: str
+    title:       str
     description: str
-    status: str
-    priority: str
-    category: str
-    createdAt: int
-    updatedAt: int
-    userId: str
-    userEmail: str
-    history: List[dict]
+    status:      str
+    priority:    str
+    category:    str
+    createdAt:   int
+    updatedAt:   int
+    userId:      str
+    userEmail:   str
+    history:     List[dict]
     analysis:           Optional[Any] = None
     riskAssessment:     Optional[Any] = None
     resolution:         Optional[Any] = None
@@ -44,13 +99,19 @@ class TicketOut(BaseModel):
     low_confidence:     Optional[bool] = None
     ai_explanation:     Optional[Any] = None
     confidence_map:     Optional[Any] = None
-    duplicate_of:       Optional[str] = None
-    affected_users:     Optional[List[str]] = None
-    linked_count:       Optional[int] = None
-    dedup_confidence:   Optional[float] = None
-    master_incident_id: Optional[str] = None
-    remediation_action: Optional[Any] = None
-    feedback:           Optional[Any] = None
+    duplicate_of:         Optional[str] = None
+    affected_users:       Optional[List[str]] = None
+    linked_count:         Optional[int] = None
+    dedup_confidence:     Optional[float] = None
+    master_incident_id:   Optional[str] = None
+    remediation_action:   Optional[Any] = None
+    feedback:             Optional[Any] = None
+    # Linked / dedup ticket enrichment fields
+    workaround_steps:     Optional[List[str]] = None
+    canonical_incident_id: Optional[str] = None
+    canonical_status:     Optional[str] = None
+    eta_label:            Optional[str] = None
+    eta_minutes:          Optional[int] = None
 
     model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
 
@@ -75,6 +136,7 @@ async def get_tickets(
     userId: Optional[str] = None,
     role:   Optional[str] = "user",
     db=Depends(get_db),
+    _user=Depends(require_auth),
 ):
     if role == "admin":
         query = {"userId": userId} if userId else {}
@@ -84,7 +146,7 @@ async def get_tickets(
         query = {"userId": userId}
 
     cursor  = db.tickets.find(query).sort("updatedAt", -1)
-    tickets = await cursor.to_list(length=100)
+    tickets = await cursor.to_list(length=_MAX_TICKETS_RETURN)
     result = []
     for t in tickets:
         t["_id"] = str(t["_id"])
@@ -97,6 +159,7 @@ async def create_ticket(
     ticket: TicketCreate,
     background_tasks: BackgroundTasks,
     db=Depends(get_db),
+    _user=Depends(require_auth),
 ):
     from main import _analyzer, _risk_agent, _escalation_agent, _resolver, _kb, _model_loader
 
@@ -152,19 +215,42 @@ async def create_ticket(
 
 
 @router.delete("/{ticket_id}")
-async def delete_ticket(ticket_id: str, db=Depends(get_db)):
-    result = await db.tickets.delete_one({"_id": ObjectId(ticket_id)})
+async def delete_ticket(
+    ticket_id: str,
+    db=Depends(get_db),
+    _user=Depends(require_auth),
+):
+    try:
+        oid = ObjectId(ticket_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ticket ID")
+    result = await db.tickets.delete_one({"_id": oid})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Ticket not found")
     return {"message": "Ticket deleted successfully"}
 
 
 @router.put("/{ticket_id}")
-async def update_ticket(ticket_id: str, update_data: dict, db=Depends(get_db)):
-    update_data.pop("_id", None)
+async def update_ticket(
+    ticket_id: str,
+    update_data: TicketUpdate,
+    db=Depends(get_db),
+    _user=Depends(require_auth),
+):
+    """Only fields declared in TicketUpdate may be changed via this endpoint."""
+    try:
+        oid = ObjectId(ticket_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ticket ID")
+
+    # Exclude unset fields so we only $set what was actually provided
+    payload = update_data.model_dump(exclude_unset=True, exclude_none=True)
+    if not payload:
+        raise HTTPException(status_code=400, detail="No valid fields provided for update")
+
     result = await db.tickets.update_one(
-        {"_id": ObjectId(ticket_id)},
-        {"$set": update_data},
+        {"_id": oid},
+        {"$set": payload},
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Ticket not found")
@@ -172,7 +258,12 @@ async def update_ticket(ticket_id: str, update_data: dict, db=Depends(get_db)):
 
 
 @router.post("/{ticket_id}/feedback")
-async def submit_feedback(ticket_id: str, req: FeedbackRequest, db=Depends(get_db)):
+async def submit_feedback(
+    ticket_id: str,
+    req: FeedbackRequest,
+    db=Depends(get_db),
+    _user=Depends(require_auth),
+):
     if req.rating not in ("positive", "negative"):
         raise HTTPException(status_code=400, detail="rating must be 'positive' or 'negative'")
     try:
@@ -187,8 +278,6 @@ async def submit_feedback(ticket_id: str, req: FeedbackRequest, db=Depends(get_d
 
     ticket = await db.tickets.find_one({"_id": oid}, {"resolution": 1})
     if ticket and ticket.get("resolution", {}).get("retrievedFrom"):
-        kb_id = ticket["resolution"]["retrievedFrom"]
-        from routers.incidents import router as _
         inc_field = "positive_feedback" if req.rating == "positive" else "negative_feedback"
         await db.kb_articles.update_one(
             {"source_ticket_id": ticket_id},

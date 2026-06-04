@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import numpy as np
+from bson import ObjectId
 
 logger = logging.getLogger("nexusdesk.agent.dedup")
 
@@ -12,7 +13,15 @@ class DedupAgent:
         self.model_loader = model_loader
         self.kb_loader = kb_loader
 
-    async def check(self, title: str, description: str, db) -> dict:
+    async def check(self, title: str, description: str, db, exclude_id=None) -> dict:
+        """Check for duplicate/linked tickets.
+        
+        Args:
+            title: Ticket title
+            description: Ticket description
+            db: Database connection
+            exclude_id: ObjectId of the current ticket to exclude from candidates
+        """
         query = f"{title}. {description}"
         loop = asyncio.get_running_loop()
 
@@ -22,6 +31,11 @@ class DedupAgent:
             {"_id": 1, "title": 1, "description": 1, "userId": 1, "affected_users": 1}
         )
         async for t in cursor:
+            # Exclude the current ticket to prevent self-match
+            if exclude_id and t["_id"] == exclude_id:
+                continue
+            if not t.get("title") or not t.get("description"):
+                continue
             open_tickets.append(t)
 
         if not open_tickets:
@@ -50,6 +64,11 @@ class DedupAgent:
         similarities = (cand_embs @ query_emb.T).flatten()
         best_idx = int(np.argmax(similarities))
         best_score = float(similarities[best_idx])
+
+        logger.debug(
+            "Dedup check: best_score=%.3f threshold=%.2f candidates=%d",
+            best_score, DEDUP_THRESHOLD, len(candidates)
+        )
 
         if best_score >= DEDUP_THRESHOLD:
             match = candidates[best_idx]

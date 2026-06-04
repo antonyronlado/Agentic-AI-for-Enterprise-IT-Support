@@ -5,10 +5,10 @@ import config
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from agents.escalation_agent import EscalationAgent
 from agents.resolution_agent import ResolutionAgent
@@ -22,6 +22,7 @@ from models.model_loader import ModelLoader
 from routers import tickets, auth, logs
 from routers import incidents, copilot, analytics, automation, multimodal
 from sla_monitor import run_sla_monitor
+from auth_deps import require_auth
 
 logging.basicConfig(
     level=logging.INFO,
@@ -79,35 +80,47 @@ async def lifespan(app: FastAPI):
     logger.info("NexusDesk shutting down.")
 
 
+# ── Allowed origins: set via ALLOWED_ORIGINS env var in production ──────────
+import os
+_raw_origins = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173",
+)
+ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+
 app = FastAPI(
     title="NexusDesk AI Engine",
     description="Agentic AI Workflow Platform for Enterprise IT Operations.",
-    version="3.0.0",
+    version="3.1.0",
+    # Disable automatic OpenAPI docs exposure in production if desired:
+    # docs_url=None, redoc_url=None,
     lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.error("%s %s -> %s: %s", request.method, request.url.path, type(exc).__name__, exc)
+    # Log full detail server-side only — never expose internals to clients
+    logger.error(
+        "Unhandled exception: %s %s -> %s: %s",
+        request.method, request.url.path, type(exc).__name__, exc,
+        exc_info=True,
+    )
+    origin = request.headers.get("origin", "")
+    allow_origin = origin if origin in ALLOWED_ORIGINS else ALLOWED_ORIGINS[0]
     return JSONResponse(
         status_code=500,
-        content={"error": type(exc).__name__, "detail": str(exc)},
+        content={"error": "Internal server error. Please try again later."},
         headers={
-            "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+            "Access-Control-Allow-Origin": allow_origin,
             "Access-Control-Allow-Credentials": "true",
         },
     )
@@ -127,7 +140,7 @@ app.include_router(multimodal.router)
 async def health():
     return {
         "status": "online",
-        "engine": "NexusDesk AI v3.0",
+        "engine": "NexusDesk AI v3.1",
         "platform": "Enterprise AI-Native IT Operations Platform",
         "features": [
             "agentic-orchestration",
@@ -144,9 +157,21 @@ async def health():
     }
 
 
+# ── Agent endpoints — all require authentication ─────────────────────────
+
 class AnalyzeRequest(BaseModel):
     title: Optional[str] = ""
     description: str
+
+    @field_validator("description")
+    @classmethod
+    def cap_description(cls, v: str) -> str:
+        return v[:4000]
+
+    @field_validator("title")
+    @classmethod
+    def cap_title(cls, v: str) -> str:
+        return (v or "")[:500]
 
 
 class RiskRequest(BaseModel):
@@ -155,6 +180,16 @@ class RiskRequest(BaseModel):
     category: Optional[str] = "other"
     priority: Optional[str] = "medium"
 
+    @field_validator("title")
+    @classmethod
+    def cap_title(cls, v: str) -> str:
+        return v[:500]
+
+    @field_validator("description")
+    @classmethod
+    def cap_description(cls, v: str) -> str:
+        return v[:4000]
+
 
 class ResolveRequest(BaseModel):
     title: str
@@ -162,20 +197,30 @@ class ResolveRequest(BaseModel):
     analysis: Optional[Any] = None
     riskAssessment: Optional[Any] = None
 
+    @field_validator("title")
+    @classmethod
+    def cap_title(cls, v: str) -> str:
+        return v[:500]
+
+    @field_validator("description")
+    @classmethod
+    def cap_description(cls, v: str) -> str:
+        return v[:4000]
+
 
 @app.post("/analyze", tags=["Agents"])
-async def analyze(req: AnalyzeRequest):
+async def analyze(req: AnalyzeRequest, _user=Depends(require_auth)):
     return await _analyzer.run(req.title or "", req.description)
 
 
 @app.post("/assess-risk", tags=["Agents"])
-async def assess_risk(req: RiskRequest):
+async def assess_risk(req: RiskRequest, _user=Depends(require_auth)):
     risk = _risk_agent.run(req.title, req.description, req.category, req.priority)
     return _escalation_agent.apply(risk)
 
 
 @app.post("/resolve", tags=["Agents"])
-async def resolve(req: ResolveRequest):
+async def resolve(req: ResolveRequest, _user=Depends(require_auth)):
     return await _resolver.run(req.title, req.description, req.analysis, req.riskAssessment)
 
 
@@ -187,9 +232,24 @@ class LearnRequest(BaseModel):
     result:      str
     category:    Optional[str] = "other"
 
+    @field_validator("title")
+    @classmethod
+    def cap_title(cls, v: str) -> str:
+        return v[:500]
+
+    @field_validator("description")
+    @classmethod
+    def cap_description(cls, v: str) -> str:
+        return v[:4000]
+
+    @field_validator("steps")
+    @classmethod
+    def cap_steps(cls, v: list) -> list:
+        return [s[:500] for s in v[:20]]
+
 
 @app.post("/learn", tags=["Learning"])
-async def learn_from_ticket(req: LearnRequest):
+async def learn_from_ticket(req: LearnRequest, _user=Depends(require_auth)):
     if not _kb:
         return JSONResponse(status_code=503, content={"error": "KB not initialized"})
     added = _kb.add_resolved_ticket(

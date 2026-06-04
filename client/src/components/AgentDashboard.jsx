@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-const API_URL = import.meta.env.VITE_AI_ENGINE_URL || 'http://localhost:8000';
+
 
 function isSlaWarning(ticket) {
   const diffMin = Math.floor((Date.now() - ticket.updatedAt) / 60000);
@@ -291,14 +291,27 @@ export function AgentDashboard() {
                       </div>
                     )}
                     {ticket.duplicate_of && (
-                      <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 flex items-center gap-3">
-                        <GitMerge className="w-4 h-4 text-violet-600 shrink-0" />
-                        <div>
-                          <p className="text-xs font-bold text-violet-800">Duplicate Detected</p>
-                          <p className="text-[10px] text-violet-700 mt-0.5">Linked to canonical ticket #{ticket.duplicate_of.slice(0, 12)} (similarity: {ticket.dedup_confidence ? `${Math.round(ticket.dedup_confidence * 100)}%` : 'high'})</p>
+                      <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 flex items-start gap-3">
+                        <GitMerge className="w-4 h-4 text-violet-600 shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-violet-800">Linked Incident</p>
+                          <p className="text-[10px] text-violet-700 mt-0.5">
+                            Linked to canonical ticket #{ticket.duplicate_of.slice(0, 12)}
+                            {ticket.dedup_confidence ? ` — ${Math.round(ticket.dedup_confidence * 100)}% similarity` : ''}
+                            {ticket.canonical_status ? ` · Status: ${ticket.canonical_status.replace(/_/g, ' ')}` : ''}
+                          </p>
+                          {ticket.eta_label && (
+                            <p className="text-[9px] font-mono text-violet-600 mt-0.5">{ticket.eta_label}</p>
+                          )}
+                          {ticket.workaround_steps?.length > 0 && (
+                            <p className="text-[9px] font-mono text-violet-500 mt-0.5">
+                              {ticket.workaround_steps.length} workaround step{ticket.workaround_steps.length !== 1 ? 's' : ''} available
+                            </p>
+                          )}
                         </div>
                       </div>
                     )}
+
 
                     <div className="sticky-tabs-bar -mx-6 px-6 pt-1">
                       <Tabs value={activeTab} onValueChange={setActiveTab}>
