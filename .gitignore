@@ -1,26 +1,37 @@
+# Dependencies
 node_modules/
 build/
 dist/
 coverage/
-.DS_Store
-*.log
-.env*
-!.env.example
 
-# Python
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment files — never commit real secrets
+.env
+.env.local
+.env.production
+.env.development
+
+# Python virtual environments
 env/
+venv/
+.venv/
+
+# Python cache
 **/__pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
 
-# FAISS index & auto-generated runtime data (rebuilt on first run)
+# FAISS index (auto-rebuilt on first run)
 backend/faiss_index/
-backend/faiss_index/learned_entries.json
 
-# HuggingFace model cache (large files, auto-downloaded)
+# HuggingFace model cache (large files, auto-downloaded on first run)
 hf_cache/
 
-# Runtime / debug artefacts
+# Logs and debug artefacts
+*.log
 metadata.json
