@@ -21,6 +21,7 @@ from knowledge_base.kb_loader import KnowledgeBaseLoader
 from models.model_loader import ModelLoader
 from routers import tickets, auth, logs
 from routers import incidents, copilot, analytics, automation, multimodal
+from routers import websites
 from sla_monitor import run_sla_monitor
 from auth_deps import require_auth
 
@@ -134,6 +135,7 @@ app.include_router(copilot.router)
 app.include_router(analytics.router)
 app.include_router(automation.router)
 app.include_router(multimodal.router)
+app.include_router(websites.router)
 
 
 @app.get("/health", tags=["System"])

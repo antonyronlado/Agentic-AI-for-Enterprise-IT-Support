@@ -20,6 +20,7 @@ class TicketCreate(BaseModel):
     description: str
     userId:      str
     userEmail:   str
+    targetWebsite: Optional[str] = None   # Website name for password reset tickets
 
     @field_validator("title")
     @classmethod
@@ -183,6 +184,7 @@ async def create_ticket(
         "linked_count":      0,
         "remediation_action": None,
         "feedback":          None,
+        "targetWebsite":     ticket.targetWebsite,
         "history": [{
             "timestamp": now,
             "status":    "open",
@@ -206,6 +208,8 @@ async def create_ticket(
         new_ticket.inserted_id,
         ticket.title,
         ticket.description,
+        ticket.userEmail,
+        ticket.targetWebsite,
         _analyzer, _risk_agent, _escalation_agent, _resolver, _kb, _model_loader,
     )
 
@@ -297,6 +301,7 @@ async def submit_feedback(
 
 async def _run_orchestrated_pipeline(
     ticket_id, title, description,
+    user_email, target_website,
     _analyzer, _risk_agent, _escalation_agent, _resolver, _kb, _model_loader,
 ):
     from database import get_db
@@ -311,4 +316,4 @@ async def _run_orchestrated_pipeline(
         kb=_kb,
         model_loader=_model_loader,
     )
-    await orchestrator.run_pipeline(ticket_id, title, description, db)
+    await orchestrator.run_pipeline(ticket_id, title, description, db, user_email=user_email, target_website=target_website)

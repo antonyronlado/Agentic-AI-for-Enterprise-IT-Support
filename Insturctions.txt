@@ -3,3 +3,30 @@ Backend
 
 Client
 npm run dev
+
+Web_Auth
+
+venv\Scripts\Activate
+python app.py
+
+Running first time
+
+(In unisys folder).\env\Scripts\python.exe .\backend\seed_websites.py
+
+Web_Auth
+
+John Doe
+john@test.com
+test123
+
+Unisys
+
+employee
+
+test1
+test1
+
+Admin
+
+ads
+ads

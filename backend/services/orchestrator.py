@@ -32,7 +32,7 @@ class AgentOrchestrator:
         self.explain = ExplainAgent()
         self.remediation = RemediationAgent()
 
-    async def run_pipeline(self, ticket_id, title: str, description: str, db):
+    async def run_pipeline(self, ticket_id, title: str, description: str, db, user_email: str = "", target_website: str = None):
         from bson import ObjectId
         tid_str = str(ticket_id)
         loop = asyncio.get_running_loop()
@@ -93,7 +93,6 @@ class AgentOrchestrator:
 
         await _update({"status": "in_progress"}, "Agentic orchestration workflow started.", "in_progress")
 
-        # ── Step 1: Deduplication ──────────────────────────────────
         dedup_result = await self.dedup.check(title, description, db, exclude_id=ticket_id)
 
         if dedup_result.get("is_duplicate"):
@@ -103,7 +102,6 @@ class AgentOrchestrator:
             )
             return
 
-        # ── Step 2: Ticket Analysis ────────────────────────────────
         analysis = None
         if self.analyzer:
             try:
@@ -124,7 +122,6 @@ class AgentOrchestrator:
                 await _mark_failed("TicketAnalyzer", str(exc))
                 return
 
-        # ── Step 3: Risk Assessment ────────────────────────────────
         risk = None
         if self.risk_agent:
             try:
@@ -142,7 +139,6 @@ class AgentOrchestrator:
                 await _mark_failed("RiskAgent", str(exc))
                 return
 
-        # ── Step 4: Escalation ─────────────────────────────────────
         if self.escalation_agent and risk:
             try:
                 risk = await _with_retry("EscalationAgent", lambda: loop.run_in_executor(
@@ -156,9 +152,11 @@ class AgentOrchestrator:
                 await _mark_failed("EscalationAgent", str(exc))
                 return
 
-        # ── Step 5: Controlled Automated Remediation ───────────────
         _category = (analysis or {}).get("suggestedCategory", "other")
-        remediation_result = await self.remediation.evaluate(title, description, _category, risk, db)
+        remediation_result = await self.remediation.evaluate(
+            title, description, _category, risk, db,
+            user_email=user_email, target_website=target_website,
+        )
         if remediation_result:
             await db.tickets.update_one(
                 {"_id": ticket_id},
@@ -169,7 +167,6 @@ class AgentOrchestrator:
                 f"Status: {remediation_result['status']} | "
                 f"NeedsApproval: {remediation_result['needs_approval']}")
 
-        # ── Step 6: Resolution via RAG ─────────────────────────────
         resolution = None
         final_status = "in_progress"
         if self.resolver:
@@ -192,7 +189,6 @@ class AgentOrchestrator:
                 await _mark_failed("ResolutionAgent", str(exc))
                 return
 
-        # ── Step 7: Explainability ─────────────────────────────────
         explanation = self.explain.build(
             title, description, analysis, risk,
             dedup_result=None,
@@ -208,10 +204,39 @@ class AgentOrchestrator:
             f"Overall AI confidence: {explanation.get('overall_ai_confidence')}% | "
             f"Sentiment: {explanation.get('sentiment')}")
 
-        # ── Step 8: Final Update ───────────────────────────────────
         if resolution:
             employee_response = resolution.get("employee_response") or "Your request is under review by our IT team."
             admin_response = resolution.get("admin_response") or ""
+
+            if remediation_result and remediation_result.get("reset_result"):
+                reset_result = remediation_result["reset_result"]
+                website_label = target_website or "the application"
+                if reset_result.get("success"):
+                    temp_pw   = reset_result.get("temp_password", "")
+                    user_name = reset_result.get("name", "User")
+                    employee_response = (
+                        f"Hi {user_name}! Your password for '{website_label}' has been "
+                        f"reset automatically by the Agentic AI.\n\n"
+                        f"Your temporary password:  {temp_pw}\n\n"
+                        f"Please log in to {website_label} using this temporary password "
+                        f"and change it immediately on your next login.\n"
+                        f"This one-time password expires after your first successful login."
+                    )
+                    final_status = "resolved"
+                else:
+                    err = reset_result.get("error", "Unknown error")
+                    if "No account found" in err:
+                        employee_response = (
+                            f"We could not find a '{website_label}' account linked to your email address. "
+                            f"Please make sure you have registered on {website_label} first, then raise a new ticket."
+                        )
+                    else:
+                        employee_response = (
+                            f"The automatic password reset for '{website_label}' encountered an issue: {err}. "
+                            f"Our IT team has been notified and will assist you manually."
+                        )
+                    final_status = "escalated"
+
             await _update(
                 {
                     "status": final_status,
@@ -229,7 +254,6 @@ class AgentOrchestrator:
                 final_status,
             )
 
-        # ── Step 9: Learning Loop ──────────────────────────────────
         try:
             if (self.kb and risk and resolution and
                     final_status == "resolved" and
@@ -271,7 +295,6 @@ class AgentOrchestrator:
 
         logger.info("Pipeline DEDUP: ticket=%s linked_to=%s sim=%.2f", tid_str, canonical_id, sim)
 
-        # Fetch canonical ticket for context
         canonical = None
         try:
             canonical = await db.tickets.find_one(
@@ -282,7 +305,6 @@ class AgentOrchestrator:
         except Exception:
             pass
 
-        # Retrieve workaround from the canonical ticket's resolution or KB
         workaround_steps = []
         workaround_source = None
         canonical_employee_response = (canonical or {}).get("employee_response", "")
@@ -296,7 +318,6 @@ class AgentOrchestrator:
                 resolution = await self.resolver.run(title, description, analysis_hint, None)
                 workaround_steps = resolution.get("steps", [])
                 workaround_source = resolution.get("kbTitle", "Knowledge Base")
-                # Filter out generic "no match" steps
                 workaround_steps = [
                     s for s in workaround_steps
                     if "no matching resolution" not in s.lower()
@@ -306,7 +327,6 @@ class AgentOrchestrator:
             except Exception as exc:
                 logger.warning("Dedup workaround retrieval failed: %s", exc)
 
-        # Determine canonical status and ETA
         canonical_status = (canonical or {}).get("status", "in_progress")
         canonical_priority = (canonical or {}).get("priority", "medium")
         eta_minutes = _eta_minutes(canonical_priority)
@@ -319,7 +339,6 @@ class AgentOrchestrator:
         else:
             eta_label = f"Under investigation — estimated {eta_minutes}–{eta_minutes + 10} min"
 
-        # Build structured employee response — always include a solution
         workaround_text = ""
         if workaround_steps:
             steps_list = "\n".join(f"  {i+1}. {s}" for i, s in enumerate(workaround_steps[:6]))
@@ -327,12 +346,10 @@ class AgentOrchestrator:
                 f"\n\nSuggested Workaround (from {workaround_source or 'KB'}):\n{steps_list}"
             )
         elif canonical_employee_response and canonical_status == "resolved":
-            # The canonical ticket was resolved — share its solution directly
             workaround_text = (
                 f"\n\nResolution Applied to Original Incident:\n{canonical_employee_response}"
             )
         elif canonical_employee_response:
-            # Canonical ticket has an AI response — surface it as context
             workaround_text = (
                 f"\n\nAI Response from Original Incident:\n"
                 + "\n".join(
@@ -351,7 +368,6 @@ class AgentOrchestrator:
             f"You will be notified automatically as soon as the incident is resolved."
         )
 
-        # Build explainability for the dedup decision
         explanation = self.explain.build(
             title, description,
             analysis=(canonical or {}).get("analysis"),
@@ -361,7 +377,6 @@ class AgentOrchestrator:
             remediation=None,
         )
 
-        # Update the duplicate ticket with full context
         now = int(datetime.now().timestamp() * 1000)
         await db.tickets.update_one(
             {"_id": ticket_id},
@@ -387,7 +402,6 @@ class AgentOrchestrator:
             }}
         )
 
-        # Update canonical ticket — add this user as affected
         try:
             await db.tickets.update_one(
                 {"_id": OID(canonical_id)},

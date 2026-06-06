@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import httpx
 from datetime import datetime
 from bson import ObjectId
 
@@ -158,7 +159,8 @@ def _match_action(title: str, description: str, category: str) -> dict | None:
 
 class RemediationAgent:
     async def evaluate(
-        self, title: str, description: str, category: str, risk: dict | None, db
+        self, title: str, description: str, category: str, risk: dict | None, db,
+        user_email: str = "", target_website: str = None,
     ) -> dict | None:
         if not risk:
             return None
@@ -215,10 +217,32 @@ class RemediationAgent:
         if not needs_approval:
             await asyncio.sleep(0.3)
             exec_now = int(datetime.now().timestamp() * 1000)
+
+            extra_audit = []
+            reset_result = None
+
+            # ── Live password reset for password_reset action ──────────────────
+            if action["id"] == "password_reset" and user_email and target_website:
+                reset_result = await self._call_website_reset(
+                    target_website, user_email, db
+                )
+                if reset_result.get("success"):
+                    extra_audit.append({
+                        "event": f"Password reset API call succeeded for {user_email} on '{target_website}'",
+                        "timestamp": exec_now,
+                        "actor": "CARS",
+                    })
+                else:
+                    extra_audit.append({
+                        "event": f"Password reset API call failed: {reset_result.get('error', 'Unknown error')}",
+                        "timestamp": exec_now,
+                        "actor": "CARS",
+                    })
+
             audit_trail = action_doc["audit_trail"] + [
                 {"event": e, "timestamp": exec_now + (i * 200), "actor": "CARS"}
                 for i, e in enumerate(action.get("audit_events", []))
-            ]
+            ] + extra_audit
             await db.remediation_actions.update_one(
                 {"_id": res.inserted_id},
                 {"$set": {
@@ -249,4 +273,37 @@ class RemediationAgent:
             "status": status,
             "needs_approval": needs_approval,
             "audit_events": action.get("audit_events", []),
+            "reset_result": reset_result,
         }
+
+    async def _call_website_reset(self, target_website: str, user_email: str, db) -> dict:
+        """
+        Look up the target website in the registry and call its password reset API.
+        Returns the API response dict.
+        """
+        try:
+            site = await db.websites.find_one(
+                {"name": {"$regex": f"^{target_website}$", "$options": "i"}}
+            )
+            if not site:
+                logger.warning("RemediationAgent: website '%s' not found in registry", target_website)
+                return {"success": False, "error": f"Website '{target_website}' not registered in Unisys registry."}
+
+            reset_url = site["reset_url"]
+            api_key   = site["api_key"]
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    reset_url,
+                    json={"email": user_email},
+                    headers={"X-API-Key": api_key, "Content-Type": "application/json"},
+                )
+                data = response.json()
+                logger.info(
+                    "RemediationAgent: reset API call → %s status=%d success=%s",
+                    reset_url, response.status_code, data.get("success")
+                )
+                return data
+        except Exception as exc:
+            logger.error("RemediationAgent: reset API call failed: %s", exc)
+            return {"success": False, "error": str(exc)}

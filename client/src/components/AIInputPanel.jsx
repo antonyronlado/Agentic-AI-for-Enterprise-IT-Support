@@ -1,19 +1,36 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthGuard';
 import { createTicket } from '../services/aiEngine';
 import { toast } from 'sonner';
 import {
   Send, Loader2, CheckCircle2, Brain, Cpu, Sparkles,
-  Ticket as TicketIcon, TrendingUp, AlertTriangle, Bot, Paperclip, ChevronDown,
+  Ticket as TicketIcon, TrendingUp, AlertTriangle, Bot, Paperclip,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { FileUploadPanel } from './multimodal/FileUploadPanel';
+
+const API_BASE = import.meta.env.VITE_AI_ENGINE_URL || 'http://localhost:8000';
 
 const PIPELINE_STEPS = [
   { id: 'create',  label: 'Submitting',  Icon: Send },
   { id: 'analyze', label: 'NLP Triage',  Icon: Brain },
   { id: 'save',    label: 'Finalizing',  Icon: Cpu },
 ];
+
+function isPasswordReset(title, description) {
+  const text = (title + ' ' + description).toLowerCase();
+  return (
+    text.includes('forgot') ||
+    text.includes('reset password') ||
+    text.includes('cannot login') ||
+    text.includes("can't login") ||
+    text.includes('cant login') ||
+    text.includes('locked out') ||
+    text.includes('lost password') ||
+    text.includes('unable to login') ||
+    text.includes('unable to sign')
+  );
+}
 
 function PipelineStep({ step, currentStep, index, totalSteps }) {
   const stepIndex = PIPELINE_STEPS.findIndex(s => s.id === currentStep);
@@ -47,13 +64,24 @@ function StatPill({ icon: Icon, label, value, color }) {
 
 export function AIInputPanel({ onTicketCreated, stats }) {
   const { user } = useAuth();
-  const [title,       setTitle]       = useState('');
-  const [description, setDescription] = useState('');
-  const [loading,     setLoading]     = useState(false);
-  const [step,        setStep]        = useState(null);
-  const [done,        setDone]        = useState(false);
-  const [showUpload,  setShowUpload]  = useState(false);
+  const [title,          setTitle]         = useState('');
+  const [description,    setDescription]   = useState('');
+  const [targetWebsite,  setTargetWebsite] = useState('');
+  const [websites,       setWebsites]      = useState([]);
+  const [loading,        setLoading]       = useState(false);
+  const [step,           setStep]          = useState(null);
+  const [done,           setDone]          = useState(false);
+  const [showUpload,     setShowUpload]    = useState(false);
   const textareaRef = useRef(null);
+
+  const fetchSites = useCallback(() => {
+    fetch(`${API_BASE}/websites/public`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setWebsites(Array.isArray(data) ? data : []))
+      .catch(() => setWebsites([]));
+  }, []);
+
+  useEffect(() => { fetchSites(); }, [fetchSites]);
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -62,6 +90,7 @@ export function AIInputPanel({ onTicketCreated, stats }) {
     el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
   }, [description]);
 
+  const showWebsiteDropdown = isPasswordReset(title, description);
   const canSubmit = title.trim().length > 2 && description.trim().length > 5 && !loading;
 
   const handleSubmit = async (e) => {
@@ -74,13 +103,20 @@ export function AIInputPanel({ onTicketCreated, stats }) {
       setStep('create');
       await new Promise(r => setTimeout(r, 300));
       setStep('analyze');
-      await createTicket({ title: title.trim(), description: description.trim(), userId: user.uid, userEmail: user.email });
+      await createTicket({
+        title: title.trim(),
+        description: description.trim(),
+        userId: user.uid,
+        userEmail: user.email,
+        targetWebsite: targetWebsite || null,
+      });
       setStep('save');
       await new Promise(r => setTimeout(r, 400));
       toast.success('Ticket submitted! Agentic workflow started.', { id: toastId });
       setDone(true);
       setTitle('');
       setDescription('');
+      setTargetWebsite('');
       setShowUpload(false);
       onTicketCreated?.();
       setTimeout(() => setDone(false), 3500);
@@ -117,10 +153,10 @@ export function AIInputPanel({ onTicketCreated, stats }) {
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <StatPill icon={TicketIcon}     label="Total"     value={stats?.total     ?? 0} color={{ bg: 'bg-slate-100',  icon: 'text-slate-500',   text: 'text-slate-700'   }} />
-          <StatPill icon={TrendingUp}     label="Active"    value={stats?.active    ?? 0} color={{ bg: 'bg-blue-50',    icon: 'text-blue-500',    text: 'text-blue-700'    }} />
-          <StatPill icon={AlertTriangle}  label="Escalated" value={stats?.escalated ?? 0} color={{ bg: 'bg-red-50',     icon: 'text-red-500',     text: 'text-red-600'     }} />
-          <StatPill icon={CheckCircle2}   label="Resolved"  value={stats?.resolved  ?? 0} color={{ bg: 'bg-emerald-50', icon: 'text-emerald-500', text: 'text-emerald-700' }} />
+          <StatPill icon={TicketIcon}    label="Total"     value={stats?.total     ?? 0} color={{ bg: 'bg-slate-100',  icon: 'text-slate-500',   text: 'text-slate-700'   }} />
+          <StatPill icon={TrendingUp}    label="Active"    value={stats?.active    ?? 0} color={{ bg: 'bg-blue-50',    icon: 'text-blue-500',    text: 'text-blue-700'    }} />
+          <StatPill icon={AlertTriangle} label="Escalated" value={stats?.escalated ?? 0} color={{ bg: 'bg-red-50',     icon: 'text-red-500',     text: 'text-red-600'     }} />
+          <StatPill icon={CheckCircle2}  label="Resolved"  value={stats?.resolved  ?? 0} color={{ bg: 'bg-emerald-50', icon: 'text-emerald-500', text: 'text-emerald-700' }} />
         </div>
       </div>
 
@@ -178,6 +214,39 @@ export function AIInputPanel({ onTicketCreated, stats }) {
               </button>
             </div>
           </div>
+
+          {/* Website dropdown — only for password reset tickets */}
+          {showWebsiteDropdown && (
+            <div style={{ border: '1px solid #a5b4fc', borderRadius: '10px', padding: '10px 12px', background: '#eef2ff' }}>
+              <p style={{ fontSize: '11px', fontWeight: 700, color: '#4338ca', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                🌐 Which application needs a password reset?
+              </p>
+              {websites.length > 0 ? (
+                <select
+                  id="target-website-select"
+                  value={targetWebsite}
+                  onChange={e => setTargetWebsite(e.target.value)}
+                  disabled={loading}
+                  style={{ width: '100%', height: '34px', borderRadius: '6px', border: '1px solid #a5b4fc', padding: '0 8px', fontSize: '13px', background: 'white', color: '#1e293b' }}
+                >
+                  <option value="">Select application (optional)</option>
+                  {websites.map(w => (
+                    <option key={w.name} value={w.name}>{w.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <p style={{ fontSize: '11px', color: '#6b7280' }}>No applications loaded.</p>
+                  <button type="button" onClick={fetchSites} style={{ fontSize: '11px', color: '#4338ca', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}>
+                    Retry
+                  </button>
+                </div>
+              )}
+              <p style={{ fontSize: '10px', color: '#6366f1', marginTop: '4px' }}>
+                AI agent will reset the password automatically.
+              </p>
+            </div>
+          )}
 
           <AnimatePresence>
             {showUpload && (

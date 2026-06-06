@@ -149,3 +149,16 @@ export function learnFromTicket(ticketId, title, description, steps, result, cat
     body: JSON.stringify({ ticket_id: ticketId, title, description, steps, result, category }),
   });
 }
+
+// ── Website Registry ──────────────────────────────────────────────────────
+export async function getWebsites() {
+  try {
+    const res = await fetch(`${API_URL}/websites/public`, {
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}

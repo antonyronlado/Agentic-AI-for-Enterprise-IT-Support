@@ -454,5 +454,42 @@
     "automated": false,
     "result": "User access fully revoked per offboarding policy.",
     "escalationReason": "Requires HR sign-off and manager approval."
+  },
+  {
+    "id": "kb-026",
+    "title": "VPN Slow / Laggy / Poor Performance",
+    "category": "network",
+    "description": "VPN is connected but slow, laggy, high latency, intermittent drops, unresponsive, poor throughput",
+    "steps": [
+      "Check the VPN server load — connect to a different VPN endpoint or region if available.",
+      "Switch VPN protocol: try IKEv2 instead of OpenVPN, or vice versa, in client settings.",
+      "Enable split tunneling in VPN settings so only corporate traffic routes through VPN.",
+      "Run a speed test (speedtest.net) without VPN to rule out a local ISP issue.",
+      "Update the VPN client to the latest available version.",
+      "Adjust MTU size: set the VPN adapter MTU to 1400 to reduce packet fragmentation.",
+      "Close bandwidth-heavy applications (video streaming, large downloads) while on VPN.",
+      "If the issue persists for multiple users, notify the network team to check VPN gateway load."
+    ],
+    "automated": true,
+    "result": "VPN performance improved after optimization.",
+    "escalationReason": null
+  },
+  {
+    "id": "kb-027",
+    "title": "VPN Connected but Cannot Access Internal Resources",
+    "category": "network",
+    "description": "VPN shows connected but cannot access intranet, internal servers, or shared drives",
+    "steps": [
+      "Verify the VPN client shows 'Connected' and the assigned corporate IP range.",
+      "Try to ping an internal server by IP address (not hostname) to test basic connectivity.",
+      "Flush DNS cache: ipconfig /flushdns, then try accessing resources again.",
+      "Check if split tunneling is enabled — disable it temporarily to force all traffic through VPN.",
+      "Verify the user's VPN access group in the admin portal has permission for the target resource.",
+      "Re-connect VPN and check if routing table includes the corporate subnets (route print).",
+      "If issue is isolated to one user, reset their VPN profile from the admin console."
+    ],
+    "automated": true,
+    "result": "Internal resource access restored via VPN.",
+    "escalationReason": null
   }
 ]
