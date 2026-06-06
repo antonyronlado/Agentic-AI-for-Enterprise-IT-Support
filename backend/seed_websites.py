@@ -1,22 +1,18 @@
-"""
-seed_websites.py - Run this ONCE to auto-register Web_Auth in the Unisys registry.
-No Postman needed.
-
-Usage:
-    Activate Unisys venv, then run:
-    python seed_websites.py
-"""
-
+import os
 import sys
 from datetime import datetime
 from pymongo import MongoClient
+from dotenv import load_dotenv
 
-MONGO_URI    = "mongodb://localhost:27017/agentic_ai"
+load_dotenv()
+
+MONGO_URI    = os.getenv("MONGO_URI", "mongodb://localhost:27017/dummy").strip('"\'')
+DB_NAME      = MONGO_URI.rsplit("/", 1)[-1]
+
 WEBSITE_NAME = "Web_Auth"
 RESET_URL    = "http://localhost:5000/api/reset-password"
 API_KEY      = "unisys-reset-secret-key-2024"
 DESCRIPTION  = "Main Web_Auth authentication portal"
-
 
 def seed():
     try:
@@ -28,7 +24,7 @@ def seed():
         print("   Error: " + str(e)[:120])
         sys.exit(1)
 
-    db  = client["agentic_ai"]
+    db  = client[DB_NAME]
     col = db["websites"]
 
     existing = col.find_one({"name": {"$regex": f"^{WEBSITE_NAME}$", "$options": "i"}})
@@ -51,7 +47,6 @@ def seed():
     print("   Description: " + DESCRIPTION)
     print("\nYou can now raise a password reset ticket in Unisys.")
     print("The AI agent will automatically reset the password on " + WEBSITE_NAME + ".\n")
-
 
 if __name__ == "__main__":
     seed()

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthGuard';
 import { createTicket } from '../services/aiEngine';
+import { isPasswordResetRequest } from '../utils/passwordReset';
 import { toast } from 'sonner';
 import {
   Send, Loader2, CheckCircle2, Brain, Cpu, Sparkles,
@@ -90,7 +91,7 @@ export function AIInputPanel({ onTicketCreated, stats }) {
     el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
   }, [description]);
 
-  const showWebsiteDropdown = isPasswordReset(title, description);
+  const showWebsiteDropdown = isPasswordResetRequest(title, description);
   const canSubmit = title.trim().length > 2 && description.trim().length > 5 && !loading;
 
   const handleSubmit = async (e) => {
@@ -109,6 +110,10 @@ export function AIInputPanel({ onTicketCreated, stats }) {
         userId: user.uid,
         userEmail: user.email,
         targetWebsite: targetWebsite || null,
+        ...(showWebsiteDropdown && {
+          allowAiPasswordReset: true,
+          passwordResetMode: 'auto',
+        }),
       });
       setStep('save');
       await new Promise(r => setTimeout(r, 400));
@@ -215,7 +220,7 @@ export function AIInputPanel({ onTicketCreated, stats }) {
             </div>
           </div>
 
-          {/* Website dropdown — only for password reset tickets */}
+          {}
           {showWebsiteDropdown && (
             <div style={{ border: '1px solid #a5b4fc', borderRadius: '10px', padding: '10px 12px', background: '#eef2ff' }}>
               <p style={{ fontSize: '11px', fontWeight: 700, color: '#4338ca', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>

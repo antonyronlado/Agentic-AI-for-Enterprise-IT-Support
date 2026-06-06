@@ -3,7 +3,6 @@ from flask_jwt_extended import JWTManager
 from pymongo import MongoClient
 from config import Config
 
-
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -21,7 +20,6 @@ def create_app():
     app.register_blueprint(reset_bp)
 
     return app
-
 
 app = create_app()
 

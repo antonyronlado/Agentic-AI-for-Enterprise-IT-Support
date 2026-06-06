@@ -7,7 +7,6 @@ from auth_deps import require_admin
 
 router = APIRouter(prefix="/copilot", tags=["Copilot"])
 
-
 class CopilotRequest(BaseModel):
     ticket_id:   str
     title:       str
@@ -24,7 +23,6 @@ class CopilotRequest(BaseModel):
     @classmethod
     def cap_description(cls, v: str) -> str:
         return v[:4000]
-
 
 @router.post("/suggest")
 async def get_suggestions(

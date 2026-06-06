@@ -10,16 +10,15 @@ from agents.dedup_agent import DedupAgent
 from agents.explain_agent import ExplainAgent
 from agents.remediation_agent import RemediationAgent
 from services.event_bus import bus
+from services.email_service import email_service
 
 logger = logging.getLogger("nexusdesk.orchestrator")
 
 MAX_RETRIES = 2
 SLA_MINUTES_BY_PRIORITY = {"critical": 15, "high": 30, "medium": 120, "low": 480}
 
-
 def _eta_minutes(priority: str) -> int:
     return SLA_MINUTES_BY_PRIORITY.get(priority, 60)
-
 
 class AgentOrchestrator:
     def __init__(self, analyzer, risk_agent, escalation_agent, resolver, kb, model_loader):
@@ -32,12 +31,38 @@ class AgentOrchestrator:
         self.explain = ExplainAgent()
         self.remediation = RemediationAgent()
 
-    async def run_pipeline(self, ticket_id, title: str, description: str, db, user_email: str = "", target_website: str = None):
+    async def run_pipeline(
+        self,
+        ticket_id,
+        title: str,
+        description: str,
+        db,
+        user_email: str = "",
+        target_website: str = None,
+        raw_title: str | None = None,
+        raw_description: str | None = None,
+        user_id: str | None = None,
+        requested_password: str | None = None,
+        allow_ai_password_reset: bool = False,
+        password_reset_mode: str = "auto",
+        user_chosen_password: bool = False,
+    ):
         from bson import ObjectId
+        from services.password_reset_service import (
+            is_password_reset_request,
+            AWAITING_CONFIRM_MESSAGE,
+        )
+
         tid_str = str(ticket_id)
         loop = asyncio.get_running_loop()
+        match_title = raw_title or title
+        match_description = raw_description or description
+        password_request = is_password_reset_request(match_title, match_description)
 
-        logger.info("Pipeline START ticket=%s title='%s'", tid_str, title)
+        logger.info(
+            "Pipeline START ticket=%s title='%s' password_request=%s",
+            tid_str, title, password_request,
+        )
 
         async def _log(agent: str, action: str, details: str):
             await db.admin_logs.insert_one({
@@ -58,6 +83,15 @@ class AgentOrchestrator:
                     "$push": {"history": {"timestamp": now, "status": new_status, "message": history_msg}},
                 },
             )
+
+            ticket = await db.tickets.find_one({"_id": ticket_id}, {"userEmail": 1, "title": 1})
+            if ticket and ticket.get("userEmail"):
+                await email_service.send_status_update(
+                    ticket["userEmail"],
+                    str(ticket_id),
+                    ticket.get("title", "Ticket"),
+                    new_status
+                )
 
         async def _mark_failed(step: str, reason: str):
             msg = f"[PIPELINE FAILED] Step '{step}' failed. Reason: {reason[:200]}"
@@ -93,7 +127,10 @@ class AgentOrchestrator:
 
         await _update({"status": "in_progress"}, "Agentic orchestration workflow started.", "in_progress")
 
-        dedup_result = await self.dedup.check(title, description, db, exclude_id=ticket_id)
+        if password_request:
+            dedup_result = {"is_duplicate": False}
+        else:
+            dedup_result = await self.dedup.check(title, description, db, exclude_id=ticket_id)
 
         if dedup_result.get("is_duplicate"):
             await self._handle_duplicate(
@@ -140,6 +177,8 @@ class AgentOrchestrator:
                 return
 
         if self.escalation_agent and risk:
+            if password_request and not risk.get("securityRisk"):
+                risk = {**risk, "risk_level": "low", "escalate": False, "confidence_score": max(risk.get("confidence_score", 0), 85)}
             try:
                 risk = await _with_retry("EscalationAgent", lambda: loop.run_in_executor(
                     None, self.escalation_agent.apply, risk, False
@@ -167,8 +206,13 @@ class AgentOrchestrator:
                 f"Status: {remediation_result['status']} | "
                 f"NeedsApproval: {remediation_result['needs_approval']}")
 
+        password_reset_result = None
+
         resolution = None
         final_status = "in_progress"
+        risk_level = (risk or {}).get("risk_level", "low")
+        confidence_score = (risk or {}).get("confidence_score")
+        low_confidence = (risk or {}).get("low_confidence", False)
         if self.resolver:
             try:
                 resolution = await _with_retry("ResolutionAgent", lambda: self.resolver.run(
@@ -204,53 +248,81 @@ class AgentOrchestrator:
             f"Overall AI confidence: {explanation.get('overall_ai_confidence')}% | "
             f"Sentiment: {explanation.get('sentiment')}")
 
-        if resolution:
-            employee_response = resolution.get("employee_response") or "Your request is under review by our IT team."
-            admin_response = resolution.get("admin_response") or ""
+        if resolution or password_reset_result or (password_request and not allow_ai_password_reset):
+            employee_response = resolution.get("employee_response") if resolution else None
+            admin_response = resolution.get("admin_response", "") if resolution else ""
+            temporary_password = None
 
-            if remediation_result and remediation_result.get("reset_result"):
-                reset_result = remediation_result["reset_result"]
-                website_label = target_website or "the application"
-                if reset_result.get("success"):
-                    temp_pw   = reset_result.get("temp_password", "")
-                    user_name = reset_result.get("name", "User")
-                    employee_response = (
-                        f"Hi {user_name}! Your password for '{website_label}' has been "
-                        f"reset automatically by the Agentic AI.\n\n"
-                        f"Your temporary password:  {temp_pw}\n\n"
-                        f"Please log in to {website_label} using this temporary password "
-                        f"and change it immediately on your next login.\n"
-                        f"This one-time password expires after your first successful login."
-                    )
-                    final_status = "resolved"
+            if password_reset_result and password_reset_result.get("success"):
+                final_status = "resolved"
+                employee_response = password_reset_result["employee_response"]
+                admin_response = password_reset_result.get("admin_response", admin_response)
+                temporary_password = password_reset_result["new_password"]
+                if resolution:
+                    resolution = {**resolution, "automated": True, "result": "Password reset completed automatically."}
                 else:
-                    err = reset_result.get("error", "Unknown error")
-                    if "No account found" in err:
+                    resolution = {
+                        "automated": True,
+                        "result": "Password reset completed automatically.",
+                        "kbTitle": "Password Reset Procedure",
+                        "steps": ["Password updated in user account."],
+                    }
+            elif password_request and not allow_ai_password_reset:
+                final_status = "awaiting_password_confirm"
+                employee_response = AWAITING_CONFIRM_MESSAGE
+                admin_response = "Password reset detected — awaiting user confirmation before AI action."
+            elif resolution:
+
+                if remediation_result and remediation_result.get("reset_result"):
+                    reset_result = remediation_result["reset_result"]
+                    website_label = target_website or "the application"
+                    if reset_result.get("success"):
+                        temp_pw   = reset_result.get("temp_password", "")
+                        user_name = reset_result.get("name", "User")
                         employee_response = (
-                            f"We could not find a '{website_label}' account linked to your email address. "
-                            f"Please make sure you have registered on {website_label} first, then raise a new ticket."
+                            f"Hi {user_name}! Your password for '{website_label}' has been "
+                            f"reset automatically by the Agentic AI.\n\n"
+                            f"Your temporary password:  {temp_pw}\n\n"
+                            f"Please log in to {website_label} using this temporary password "
+                            f"and change it immediately on your next login.\n"
+                            f"This one-time password expires after your first successful login."
                         )
+                        final_status = "resolved"
                     else:
-                        employee_response = (
-                            f"The automatic password reset for '{website_label}' encountered an issue: {err}. "
-                            f"Our IT team has been notified and will assist you manually."
-                        )
-                    final_status = "escalated"
+                        err = reset_result.get("error", "Unknown error")
+                        if "No account found" in err:
+                            employee_response = (
+                                f"We could not find a '{website_label}' account linked to your email address. "
+                                f"Please make sure you have registered on {website_label} first, then raise a new ticket."
+                            )
+                        else:
+                            employee_response = (
+                                f"The automatic password reset for '{website_label}' encountered an issue: {err}. "
+                                f"Our IT team has been notified and will assist you manually."
+                            )
+                        final_status = "escalated"
+                else:
+                    employee_response = resolution.get("employee_response") or "Your request is under review by our IT team."
+                    admin_response = resolution.get("admin_response") or ""
+
+            update_fields = {
+                "status": final_status,
+                "riskAssessment": risk,
+                "resolution": resolution,
+                "employee_response": employee_response,
+                "admin_response": admin_response,
+                "risk_level": risk_level,
+                "confidence_score": confidence_score,
+                "low_confidence": low_confidence,
+            }
+            if temporary_password:
+                update_fields["temporary_password"] = temporary_password
 
             await _update(
-                {
-                    "status": final_status,
-                    "riskAssessment": risk,
-                    "resolution": resolution,
-                    "employee_response": employee_response,
-                    "admin_response": admin_response,
-                    "risk_level": risk_level,
-                    "confidence_score": confidence_score,
-                    "low_confidence": low_confidence,
-                },
+                update_fields,
                 f"Agentic workflow complete. Status: {final_status.upper()}. "
                 f"Risk: {(risk or {}).get('risk_level', 'low').upper()}. "
-                f"{'Controlled remediation applied.' if (resolution or {}).get('automated') else 'Awaiting IT agent.'}",
+                f"{'Password reset applied automatically.' if temporary_password else ('Controlled remediation applied.' if (resolution or {}).get('automated') else 'Awaiting IT agent.')}",
                 final_status,
             )
 

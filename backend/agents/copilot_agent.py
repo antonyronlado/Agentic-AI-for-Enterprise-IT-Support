@@ -4,7 +4,6 @@ import numpy as np
 
 logger = logging.getLogger("nexusdesk.agent.copilot")
 
-
 class CopilotAgent:
     def __init__(self, model_loader, kb_loader):
         self.model_loader = model_loader

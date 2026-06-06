@@ -45,7 +45,6 @@ _NO_KB_ADMIN = (
     "and assign to a Level-2 engineer."
 )
 
-
 class ResolutionAgent:
     def __init__(self, model_loader: ModelLoader, kb_loader: KnowledgeBaseLoader):
         self.model_loader = model_loader
@@ -62,7 +61,7 @@ class ResolutionAgent:
 
         if best_match is None:
             return {
-                "employee_response": self._build_no_kb_employee(risk_level, final_status, escalate),
+                "employee_response": self._build_no_kb_employee(title, risk_level, final_status, escalate),
                 "admin_response":    self._build_no_kb_admin(analysis, risk),
                 "steps": [
                     "No matching resolution found in the knowledge base.",
@@ -107,37 +106,62 @@ class ResolutionAgent:
             return None
         return self.kb_loader.entries[best_idx]
 
+    def _clean_title(self, title: str) -> str:
+        clean = title.strip().rstrip('.')
+        if clean and clean[0].isupper() and not clean.isupper():
+            if len(clean) > 1 and not clean[1].isupper():
+                clean = clean[0].lower() + clean[1:]
+        return clean
+
+    def _tailor_steps_for_employee(self, steps: list[str]) -> list[str]:
+        import re
+        tailored = []
+        for step in steps:
+            s = step
+            s = re.sub(r'(?i)\buser\'s\b', 'your', s)
+            s = re.sub(r'(?i)\bthe user\b', 'you', s)
+            s = re.sub(r'(?i)\buser identity\b', 'your identity', s)
+            s = re.sub(r'(?i)\bfor the user\b', 'for you', s)
+            s = re.sub(r'(?i)\bnotify user\b', 'notify you', s)
+            s = re.sub(r'(?i)\bsend the user\b', 'send you', s)
+            s = re.sub(r'(?i)\bguide the user\b', 'guide you', s)
+            s = re.sub(r'(?i)\bask the user\b', 'ask you', s)
+            s = re.sub(r'(?i)\bAdmin:\s*', 'An administrator will ', s)
+            s = re.sub(r'(?i)\bselect user\b', 'select your account', s)
+            s = re.sub(r'\s+', ' ', s).strip()
+            tailored.append(s)
+        return tailored
+
     def _build_employee_response(self, title, risk_level, final_status, escalate, automated, kb):
-        kb_title = kb.get("title", "")
-        kb_cat   = kb.get("category", "other")
-        steps    = kb.get("steps", [])
-        intros   = _CATEGORY_INTROS.get(kb_cat, _CATEGORY_INTROS["other"])
+        steps = kb.get("steps", [])
+        clean_title = self._clean_title(title)
 
         if escalate or risk_level == "high":
-            intro = intros["escalated"]
-            base  = f"{intro}\n\nA specialist will contact you shortly. No immediate action is required from your side."
+            base = f"Your request regarding '{clean_title}' has been escalated to our specialist support team for manual review. A specialist will contact you shortly."
             if steps:
-                numbered = "\n".join(f"{i+1}. {s}" for i, s in enumerate(steps))
-                return f"{base}\n\nPreliminary steps while awaiting a specialist:\n{numbered}"
+                tailored_steps = self._tailor_steps_for_employee(steps)
+                numbered = "\n".join(f"{i+1}. {s}" for i, s in enumerate(tailored_steps))
+                return f"{base}\n\nPreliminary steps you can review while awaiting a specialist:\n{numbered}"
             return base
 
         if automated and risk_level == "low":
-            intro = intros["resolved"]
+            intro = f"Our AI agent has successfully resolved your request regarding '{clean_title}'."
         elif final_status == "resolved":
-            intro = intros["resolved"]
+            intro = f"Our AI agent has successfully resolved your request regarding '{clean_title}'."
         else:
-            intro = intros["in_progress"]
+            intro = f"Our AI agent has analyzed your request regarding '{clean_title}' and prepared the following resolution steps."
 
         if steps:
-            numbered   = "\n".join(f"{i+1}. {step}" for i, step in enumerate(steps))
-            ticket_ref = f" for '{title}'" if title else (f" for '{kb_title}'" if kb_title else "")
-            return f"{intro}\n\nResolution steps{ticket_ref}:\n{numbered}"
+            tailored_steps = self._tailor_steps_for_employee(steps)
+            numbered   = "\n".join(f"{i+1}. {step}" for i, step in enumerate(tailored_steps))
+            return f"{intro}\n\nResolution steps:\n{numbered}"
         return intro
 
-    def _build_no_kb_employee(self, risk_level, final_status, escalate):
+    def _build_no_kb_employee(self, title, risk_level, final_status, escalate):
+        clean_title = self._clean_title(title)
         if escalate or risk_level == "high":
-            return _CATEGORY_INTROS["other"]["escalated"]
-        return _NO_KB_EMPLOYEE
+            return f"Your request regarding '{clean_title}' requires specialist review and has been escalated to our support team."
+        return f"We received your request regarding '{clean_title}'. Our AI agent is currently reviewing it, and a support specialist will reach out with the next steps shortly."
 
     def _build_admin_response(self, kb, analysis, risk, automated):
         sections = []

@@ -12,7 +12,6 @@ INTENT_MAP = {
     "other": "General IT Support Request",
 }
 
-
 class TicketAnalyzerAgent:
     def __init__(self, model_loader: ModelLoader):
         self.model_loader = model_loader

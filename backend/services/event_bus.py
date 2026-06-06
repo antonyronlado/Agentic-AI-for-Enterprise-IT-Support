@@ -5,7 +5,6 @@ from typing import Callable
 
 logger = logging.getLogger("nexusdesk.eventbus")
 
-
 class EventBus:
     def __init__(self):
         self._handlers: dict[str, list[Callable]] = defaultdict(list)
@@ -23,6 +22,5 @@ class EventBus:
                     handler(payload)
             except Exception as exc:
                 logger.error("EventBus handler error [%s]: %s", event, exc)
-
 
 bus = EventBus()

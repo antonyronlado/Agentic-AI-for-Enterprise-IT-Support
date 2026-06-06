@@ -119,7 +119,7 @@ export function AutoActionPanel({ action, ticketId, onUpdate }) {
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      {/* Header */}
+      {}
       <div className="px-4 py-3 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-indigo-50/30 flex items-center gap-2">
         <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-sm">
           <Shield className="w-3.5 h-3.5 text-white" />
@@ -135,7 +135,7 @@ export function AutoActionPanel({ action, ticketId, onUpdate }) {
       </div>
 
       <div className="p-4 space-y-4">
-        {/* Action summary */}
+        {}
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1 flex-1">
             <p className="text-sm font-bold text-slate-900">{action.name}</p>
@@ -153,7 +153,7 @@ export function AutoActionPanel({ action, ticketId, onUpdate }) {
           </div>
         </div>
 
-        {/* Confidence bar */}
+        {}
         {confidence && (
           <div className="space-y-0.5">
             <p className="text-[9px] font-mono uppercase text-slate-400 tracking-wider">AI Match Confidence</p>
@@ -172,7 +172,7 @@ export function AutoActionPanel({ action, ticketId, onUpdate }) {
           </div>
         )}
 
-        {/* Execution steps */}
+        {}
         {action.steps?.length > 0 && (
           <div className="space-y-1.5">
             <p className="text-[9px] font-mono uppercase text-slate-400 tracking-wider">Execution Plan</p>
@@ -193,7 +193,7 @@ export function AutoActionPanel({ action, ticketId, onUpdate }) {
           </div>
         )}
 
-        {/* Approval gate */}
+        {}
         {action.needs_approval && status === 'pending_approval' && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2.5">
             <div className="flex items-center gap-1.5">
@@ -233,7 +233,7 @@ export function AutoActionPanel({ action, ticketId, onUpdate }) {
           </div>
         )}
 
-        {/* Rollback */}
+        {}
         {status === 'executed' && (
           <div className="space-y-2">
             {confirm === 'rollback' ? (
@@ -251,7 +251,7 @@ export function AutoActionPanel({ action, ticketId, onUpdate }) {
           </div>
         )}
 
-        {/* Rollback plan */}
+        {}
         {action.rollback_plan && (
           <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2">
             <p className="text-[9px] font-mono uppercase text-slate-400 tracking-wider mb-1">Rollback Plan</p>
@@ -259,7 +259,7 @@ export function AutoActionPanel({ action, ticketId, onUpdate }) {
           </div>
         )}
 
-        {/* Audit trail */}
+        {}
         <AuditTimeline events={auditEvents} />
       </div>
     </div>

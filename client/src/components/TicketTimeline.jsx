@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { StatusBadge, StatusDot, AIActionLabel } from './StatusBadge';
 import { Button } from '@/components/ui/button';
+import { PasswordResetOptions } from './PasswordResetOptions';
 import {
   ChevronDown, Clock, Trash2, Zap,
   Ticket as TicketIcon, GitMerge, CheckCircle, AlertTriangle, ThumbsUp, ThumbsDown,
@@ -16,9 +17,6 @@ function formatRelativeTime(ts) {
   return `${Math.floor(diffMin / 1440)}d ago`;
 }
 
-// ─────────────────────────────────────────────────────────
-//  Inline detail panel shown when a ticket is expanded
-// ─────────────────────────────────────────────────────────
 function LinkedIncidentBanner({ ticket }) {
   const canonicalStatus = ticket.canonical_status || 'in_progress';
   const etaLabel = ticket.eta_label || 'Under investigation';
@@ -31,7 +29,6 @@ function LinkedIncidentBanner({ ticket }) {
     canonicalStatus === 'escalated' ? 'text-red-600 bg-red-50 border-red-200' :
     'text-amber-600 bg-amber-50 border-amber-200';
 
-  // Extract the actual solution text from employee_response (skip the header line)
   const solutionText = employeeResponse
     ? employeeResponse.replace(/^Linked Incident Detected\n/, '').trim()
     : '';
@@ -66,7 +63,7 @@ function LinkedIncidentBanner({ ticket }) {
           </div>
         </div>
 
-        {/* Show the AI solution — from workaround steps or the full employee response */}
+        {}
         {workaroundSteps.length > 0 ? (
           <div className="rounded-lg bg-white border border-violet-100 p-3 space-y-1.5">
             <p className="text-[9px] font-mono uppercase text-slate-400 tracking-wider flex items-center gap-1">
@@ -100,9 +97,15 @@ function LinkedIncidentBanner({ ticket }) {
   );
 }
 
-function TicketDetailInline({ ticket, onFeedback }) {
+function TicketDetailInline({ ticket, onFeedback, onPasswordConfirm }) {
   const statusKey = ticket.status || 'open';
   const isLinked  = statusKey === 'linked';
+  const isAwaitingReset = statusKey === 'awaiting_password_confirm';
+
+  const [pwdMode, setPwdMode] = useState('auto');
+  const [preferredPassword, setPreferredPassword] = useState('');
+  const [pwdConsent, setPwdConsent] = useState(false);
+  const ticketId = ticket._id || ticket.id;
 
   return (
     <motion.div
@@ -122,6 +125,31 @@ function TicketDetailInline({ ticket, onFeedback }) {
 
         {isLinked ? (
           <LinkedIncidentBanner ticket={ticket} />
+        ) : isAwaitingReset ? (
+          <div className="space-y-3">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs font-semibold text-amber-900 mb-1">⚠️ Password Reset Confirmation Required</p>
+              <p className="text-[11px] text-amber-800 leading-relaxed whitespace-pre-line">
+                {ticket.employee_response}
+              </p>
+            </div>
+            <PasswordResetOptions
+              consent={pwdConsent}
+              onConsentChange={setPwdConsent}
+              mode={pwdMode}
+              onModeChange={setPwdMode}
+              preferredPassword={preferredPassword}
+              onPreferredPasswordChange={setPreferredPassword}
+            />
+            {pwdConsent && (
+              <Button
+                onClick={() => onPasswordConfirm?.(ticketId, { passwordResetMode: pwdMode, preferredPassword })}
+                className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs h-9"
+              >
+                Confirm Password Reset
+              </Button>
+            )}
+          </div>
         ) : ticket.employee_response ? (
           <div className="space-y-3">
             <div className="rounded-lg border border-indigo-100 bg-gradient-to-br from-indigo-50/80 to-violet-50/40 p-4 space-y-2">
@@ -182,10 +210,7 @@ function TicketDetailInline({ ticket, onFeedback }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────
-//  Single timeline row
-// ─────────────────────────────────────────────────────────
-function TimelineItem({ ticket, isExpanded, onToggle, onDelete, onFeedback }) {
+function TimelineItem({ ticket, isExpanded, onToggle, onDelete, onFeedback, onPasswordConfirm }) {
   const statusKey = ticket.status || 'open';
   const ticketId  = ticket._id || ticket.id || '';
 
@@ -198,7 +223,7 @@ function TimelineItem({ ticket, isExpanded, onToggle, onDelete, onFeedback }) {
       transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
       className="timeline-line"
     >
-      {/* ── Row ─────────────────────────────────────────── */}
+      {}
       <div
         className={`
           group relative flex items-start gap-3 cursor-pointer
@@ -212,12 +237,12 @@ function TimelineItem({ ticket, isExpanded, onToggle, onDelete, onFeedback }) {
         tabIndex={0}
         onKeyDown={e => e.key === 'Enter' && onToggle()}
       >
-        {/* Left: Status dot */}
+        {}
         <div className="pt-1 shrink-0">
           <StatusDot status={statusKey} size="md" />
         </div>
 
-        {/* Center: Info */}
+        {}
         <div className="flex-1 min-w-0 space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[9px] font-mono text-slate-400 uppercase">
@@ -231,10 +256,10 @@ function TimelineItem({ ticket, isExpanded, onToggle, onDelete, onFeedback }) {
           `}>
             {ticket.title}
           </p>
-          <AIActionLabel status={statusKey} automated={ticket.resolution?.automated} />
+          <AIActionLabel status={statusKey} automated={ticket.resolution?.automated} hasResponse={!!ticket.employee_response} />
         </div>
 
-        {/* Right: Time + actions */}
+        {}
         <div className="flex items-center gap-2 shrink-0 ml-2">
           <div className="flex items-center gap-1 text-[9px] font-mono text-slate-400">
             <Clock className="w-3 h-3" />
@@ -259,7 +284,7 @@ function TimelineItem({ ticket, isExpanded, onToggle, onDelete, onFeedback }) {
         </div>
       </div>
 
-      {/* ── Expandable detail ───────────────────────────── */}
+      {}
       <AnimatePresence>
         {isExpanded && (
           <motion.div
@@ -269,7 +294,7 @@ function TimelineItem({ ticket, isExpanded, onToggle, onDelete, onFeedback }) {
             transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
             className="overflow-hidden px-4"
           >
-            <TicketDetailInline ticket={ticket} onFeedback={onFeedback} />
+            <TicketDetailInline ticket={ticket} onFeedback={onFeedback} onPasswordConfirm={onPasswordConfirm} />
             <div className="h-4" />
           </motion.div>
         )}
@@ -278,9 +303,6 @@ function TimelineItem({ ticket, isExpanded, onToggle, onDelete, onFeedback }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────
-//  Filter pills
-// ─────────────────────────────────────────────────────────
 const FILTERS = [
   { key: 'all',       label: 'All' },
   { key: 'active',    label: 'Active' },
@@ -302,13 +324,7 @@ function filterTickets(tickets, key) {
   return tickets;
 }
 
-
-
-
-// ─────────────────────────────────────────────────────────
-//  Main component
-// ─────────────────────────────────────────────────────────
-export function TicketTimeline({ tickets, onDelete, onFeedback, loading }) {
+export function TicketTimeline({ tickets, onDelete, onFeedback, onPasswordConfirm, loading }) {
   const [filter,   setFilter]   = useState('all');
   const [expanded, setExpanded] = useState(null);
 
@@ -321,7 +337,7 @@ export function TicketTimeline({ tickets, onDelete, onFeedback, loading }) {
   return (
     <div className="flex flex-col gap-4 h-full">
 
-      {/* ── Filter strip ─────────────────────────────────── */}
+      {}
       <div className="flex items-center gap-1.5 flex-wrap">
         {FILTERS.map(f => {
           const count = filterTickets(tickets, f.key).length;
@@ -351,7 +367,7 @@ export function TicketTimeline({ tickets, onDelete, onFeedback, loading }) {
         </div>
       </div>
 
-      {/* ── Timeline list ─────────────────────────────────── */}
+      {}
       <div className="flex-1 space-y-1">
         <AnimatePresence mode="popLayout" initial={false}>
           {filtered.length > 0 ? (
@@ -359,13 +375,14 @@ export function TicketTimeline({ tickets, onDelete, onFeedback, loading }) {
               const id = ticket._id || ticket.id;
               return (
                 <TimelineItem
-                  key={id}
-                  ticket={ticket}
-                  isExpanded={expanded === id}
-                  onToggle={() => toggleExpand(id)}
-                  onDelete={onDelete}
-                  onFeedback={onFeedback}
-                />
+                   key={id}
+                   ticket={ticket}
+                   isExpanded={expanded === id}
+                   onToggle={() => toggleExpand(id)}
+                   onDelete={onDelete}
+                   onFeedback={onFeedback}
+                   onPasswordConfirm={onPasswordConfirm}
+                 />
               );
             })
           ) : !loading ? (
@@ -394,7 +411,7 @@ export function TicketTimeline({ tickets, onDelete, onFeedback, loading }) {
               )}
             </motion.div>
           ) : (
-            // Loading skeletons
+
             <motion.div
               key="skeletons"
               initial={{ opacity: 0 }}

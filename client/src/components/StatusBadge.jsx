@@ -58,6 +58,13 @@ const CONFIG = {
     icon: XCircle,
     animated: false,
   },
+  awaiting_password_confirm: {
+    label: 'Confirm Reset',
+    dot: 'bg-amber-500',
+    badge: 'bg-amber-50 text-amber-800 border-amber-200',
+    icon: AlertTriangle,
+    animated: true,
+  },
 };
 
 const sizeClasses = {
@@ -78,13 +85,6 @@ const dotSizes = {
   lg: 'w-2.5 h-2.5',
 };
 
-/**
- * Unified status badge used across both dashboards.
- * @param {string} status - ticket status key
- * @param {'sm'|'md'|'lg'} size
- * @param {boolean} showDot - show left-side color dot instead of icon (default false)
- * @param {boolean} pill - pill shape (default true)
- */
 export function StatusBadge({ status, size = 'md', showDot = false, pill = true }) {
   const cfg = CONFIG[status] || CONFIG.open;
   const Icon = cfg.icon;
@@ -109,9 +109,6 @@ export function StatusBadge({ status, size = 'md', showDot = false, pill = true 
   );
 }
 
-/**
- * Standalone animated dot (for timeline left rail).
- */
 export function StatusDot({ status, size = 'md' }) {
   const cfg = CONFIG[status] || CONFIG.open;
   const isAnimated = cfg.animated;
@@ -134,10 +131,7 @@ export function StatusDot({ status, size = 'md' }) {
   );
 }
 
-/**
- * AI action label shown in the timeline.
- */
-export function AIActionLabel({ status, automated }) {
+export function AIActionLabel({ status, automated, hasResponse }) {
   if (status === 'resolved' && automated) {
     return (
       <span className="inline-flex items-center gap-1 text-[9px] font-mono uppercase tracking-wider text-emerald-600">
@@ -161,6 +155,13 @@ export function AIActionLabel({ status, automated }) {
     );
   }
   if (['analyzing', 'risk_assessment', 'resolving', 'in_progress'].includes(status)) {
+    if (hasResponse) {
+      return (
+        <span className="text-[9px] font-mono uppercase tracking-wider text-amber-600">
+          Awaiting agent action
+        </span>
+      );
+    }
     return (
       <span className="inline-flex items-center gap-1 text-[9px] font-mono uppercase tracking-wider text-violet-600">
         <motion.span

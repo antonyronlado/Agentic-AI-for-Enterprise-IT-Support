@@ -23,7 +23,6 @@ _MULTI_USER_KEYWORDS = [
     "whole office", "entire floor", "all staff"
 ]
 
-
 def _detect_sentiment(text: str) -> tuple[str, int]:
     t = text.lower()
     neg = sum(1 for w in _SENTIMENT_NEGATIVE if w in t)
@@ -34,16 +33,13 @@ def _detect_sentiment(text: str) -> tuple[str, int]:
         return "positive", min(100, 50 + pos * 8)
     return "neutral", 50
 
-
 def _is_business_critical(text: str) -> bool:
     t = text.lower()
     return any(kw in t for kw in _BUSINESS_CRITICAL_KEYWORDS)
 
-
 def _affects_multiple_users(text: str) -> bool:
     t = text.lower()
     return any(kw in t for kw in _MULTI_USER_KEYWORDS)
-
 
 def _build_priority_explanation(analysis: dict, sentiment: str, text: str) -> tuple[list[str], int]:
     cat = analysis.get("suggestedCategory", "other")
@@ -67,7 +63,6 @@ def _build_priority_explanation(analysis: dict, sentiment: str, text: str) -> tu
         reasons.append(f"High classifier confidence ({conf}%) reinforces {pri.upper()} priority decision")
 
     return reasons, conf
-
 
 def _build_risk_explanation(risk: dict) -> tuple[list[str], int]:
     rl = risk.get("risk_level", "low")
@@ -95,7 +90,6 @@ def _build_risk_explanation(risk: dict) -> tuple[list[str], int]:
 
     return reasons, conf
 
-
 def _build_escalation_explanation(risk: dict) -> tuple[list[str], int, bool]:
     triggered = risk.get("escalate", False)
     conf = risk.get("confidence_score", 70)
@@ -121,7 +115,6 @@ def _build_escalation_explanation(risk: dict) -> tuple[list[str], int, bool]:
         ]
 
     return reasons, conf, triggered
-
 
 def _build_remediation_explanation(remediation: dict | None) -> dict | None:
     if not remediation:
@@ -153,7 +146,6 @@ def _build_remediation_explanation(remediation: dict | None) -> dict | None:
         "confidence": 85 if not needs_approval else 70,
     }
 
-
 def _build_dedup_explanation(dedup_result: dict | None) -> dict | None:
     if not dedup_result or not dedup_result.get("is_duplicate"):
         return None
@@ -173,7 +165,6 @@ def _build_dedup_explanation(dedup_result: dict | None) -> dict | None:
         "confidence": conf,
         "reasons": reasons,
     }
-
 
 def _build_reasoning_trace(
     analysis: dict | None,
@@ -263,7 +254,6 @@ def _build_reasoning_trace(
     })
 
     return trace
-
 
 class ExplainAgent:
     def build(

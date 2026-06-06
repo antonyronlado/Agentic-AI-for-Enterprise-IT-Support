@@ -182,7 +182,7 @@ export function ExplainCard({ explanation }) {
 
   return (
     <div className="space-y-4">
-      {/* ── Header ── */}
+      {}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-md shadow-indigo-500/20">
@@ -206,7 +206,7 @@ export function ExplainCard({ explanation }) {
         )}
       </div>
 
-      {/* ── Context flags ── */}
+      {}
       {(business_critical || multi_user_impact) && (
         <div className="flex gap-2 flex-wrap">
           {business_critical && (
@@ -224,7 +224,7 @@ export function ExplainCard({ explanation }) {
         </div>
       )}
 
-      {/* ── Deduplication card ── */}
+      {}
       {deduplication?.is_duplicate && (
         <DecisionCard
           title="Deduplication Detection"
@@ -236,7 +236,7 @@ export function ExplainCard({ explanation }) {
         />
       )}
 
-      {/* ── Decision cards ── */}
+      {}
       <div className="space-y-2">
         {priority && (
           <DecisionCard
@@ -299,7 +299,7 @@ export function ExplainCard({ explanation }) {
         )}
       </div>
 
-      {/* ── Agent Confidence Map ── */}
+      {}
       {confidence_map && Object.values(confidence_map).some(v => v != null) && (
         <ExpandableSection title="Agent Confidence Map" defaultOpen={true}>
           <div className="space-y-2.5 pt-3">
@@ -316,7 +316,7 @@ export function ExplainCard({ explanation }) {
         </ExpandableSection>
       )}
 
-      {/* ── Reasoning Trace ── */}
+      {}
       {reasoning_trace && reasoning_trace.length > 0 && (
         <ExpandableSection
           title="Agent Reasoning Trace"

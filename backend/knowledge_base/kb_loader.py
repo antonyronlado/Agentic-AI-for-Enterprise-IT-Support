@@ -11,7 +11,6 @@ INDEX_PATH   = INDEX_DIR / "index.faiss"
 ENTRIES_PATH = INDEX_DIR / "entries.json"
 LEARNED_PATH = INDEX_DIR / "learned_entries.json"
 
-
 class KnowledgeBaseLoader:
     def __init__(self, model_loader: ModelLoader):
         self.model_loader = model_loader

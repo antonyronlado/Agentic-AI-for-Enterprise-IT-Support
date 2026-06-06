@@ -11,9 +11,9 @@ router = APIRouter(prefix="/websites", tags=["Website Registry"])
 
 
 class WebsiteCreate(BaseModel):
-    name: str               # Unique display name e.g. "Web_Auth"
-    reset_url: str          # Full URL to the /api/reset-password endpoint
-    api_key: str            # Shared secret key for the reset endpoint
+    name: str
+    reset_url: str
+    api_key: str
     description: Optional[str] = ""
 
 
@@ -27,7 +27,6 @@ class WebsiteOut(BaseModel):
 
 @router.get("", response_model=List[WebsiteOut])
 async def list_websites(db=Depends(get_db), _user=Depends(require_admin)):
-    """List all registered external websites."""
     cursor = db.websites.find({})
     sites = await cursor.to_list(length=100)
     return [
@@ -44,7 +43,6 @@ async def list_websites(db=Depends(get_db), _user=Depends(require_admin)):
 
 @router.get("/public", response_model=List[dict])
 async def list_websites_public(db=Depends(get_db)):
-    """List website names only — used by TicketForm dropdown (no auth required)."""
     cursor = db.websites.find({}, {"name": 1, "_id": 0})
     sites = await cursor.to_list(length=100)
     return [{"name": s["name"]} for s in sites]
@@ -56,7 +54,6 @@ async def register_website(
     db=Depends(get_db),
     _user=Depends(require_admin),
 ):
-    """Register a new external website with its reset API endpoint."""
     existing = await db.websites.find_one({"name": {"$regex": f"^{payload.name}$", "$options": "i"}})
     if existing:
         raise HTTPException(status_code=409, detail=f"Website '{payload.name}' is already registered.")
@@ -85,7 +82,6 @@ async def delete_website(
     db=Depends(get_db),
     _user=Depends(require_admin),
 ):
-    """Remove a registered website from the registry."""
     try:
         oid = ObjectId(website_id)
     except Exception:

@@ -34,7 +34,6 @@ PERFORMANCE_KEYWORDS = [
 
 PRIORITY_WEIGHTS = {"critical": 1.0, "high": 0.75, "medium": 0.45, "low": 0.15}
 
-
 class RiskAgent:
     def run(self, title: str, description: str, category: str = "other", priority: str = "medium") -> dict:
         text = f"{title} {description}".lower()

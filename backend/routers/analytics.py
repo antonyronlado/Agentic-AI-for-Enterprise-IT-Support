@@ -5,7 +5,6 @@ from auth_deps import require_admin
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
-
 @router.get("/overview")
 async def overview(
     db=Depends(get_db),
@@ -15,7 +14,6 @@ async def overview(
     if not _trend_agent:
         return {}
     return await _trend_agent.get_overview(db)
-
 
 @router.get("/trends")
 async def trends(
@@ -27,7 +25,6 @@ async def trends(
         return {}
     return await _trend_agent.get_trends(db)
 
-
 @router.get("/trend-intelligence")
 async def trend_intelligence(
     db=Depends(get_db),
@@ -37,7 +34,6 @@ async def trend_intelligence(
     if not _trend_agent:
         return {}
     return await _trend_agent.get_trend_intelligence(db)
-
 
 @router.get("/resolution-perf")
 async def resolution_perf(

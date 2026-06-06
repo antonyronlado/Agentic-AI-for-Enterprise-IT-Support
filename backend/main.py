@@ -42,7 +42,6 @@ _trend_agent:      TrendAgent          | None = None
 _model_loader:     ModelLoader         | None = None
 _sla_task:         asyncio.Task        | None = None
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _analyzer, _resolver, _risk_agent, _escalation_agent, _kb
@@ -80,8 +79,6 @@ async def lifespan(app: FastAPI):
             pass
     logger.info("NexusDesk shutting down.")
 
-
-# ── Allowed origins: set via ALLOWED_ORIGINS env var in production ──────────
 import os
 _raw_origins = os.getenv(
     "ALLOWED_ORIGINS",
@@ -93,8 +90,6 @@ app = FastAPI(
     title="NexusDesk AI Engine",
     description="Agentic AI Workflow Platform for Enterprise IT Operations.",
     version="3.1.0",
-    # Disable automatic OpenAPI docs exposure in production if desired:
-    # docs_url=None, redoc_url=None,
     lifespan=lifespan,
 )
 
@@ -106,10 +101,8 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
-
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    # Log full detail server-side only — never expose internals to clients
     logger.error(
         "Unhandled exception: %s %s -> %s: %s",
         request.method, request.url.path, type(exc).__name__, exc,
@@ -126,7 +119,6 @@ async def global_exception_handler(request: Request, exc: Exception):
         },
     )
 
-
 app.include_router(tickets.router)
 app.include_router(auth.router)
 app.include_router(logs.router)
@@ -136,7 +128,6 @@ app.include_router(analytics.router)
 app.include_router(automation.router)
 app.include_router(multimodal.router)
 app.include_router(websites.router)
-
 
 @app.get("/health", tags=["System"])
 async def health():
@@ -158,9 +149,6 @@ async def health():
         ],
     }
 
-
-# ── Agent endpoints — all require authentication ─────────────────────────
-
 class AnalyzeRequest(BaseModel):
     title: Optional[str] = ""
     description: str
@@ -174,7 +162,6 @@ class AnalyzeRequest(BaseModel):
     @classmethod
     def cap_title(cls, v: str) -> str:
         return (v or "")[:500]
-
 
 class RiskRequest(BaseModel):
     title: str
@@ -192,7 +179,6 @@ class RiskRequest(BaseModel):
     def cap_description(cls, v: str) -> str:
         return v[:4000]
 
-
 class ResolveRequest(BaseModel):
     title: str
     description: str
@@ -209,22 +195,18 @@ class ResolveRequest(BaseModel):
     def cap_description(cls, v: str) -> str:
         return v[:4000]
 
-
 @app.post("/analyze", tags=["Agents"])
 async def analyze(req: AnalyzeRequest, _user=Depends(require_auth)):
     return await _analyzer.run(req.title or "", req.description)
-
 
 @app.post("/assess-risk", tags=["Agents"])
 async def assess_risk(req: RiskRequest, _user=Depends(require_auth)):
     risk = _risk_agent.run(req.title, req.description, req.category, req.priority)
     return _escalation_agent.apply(risk)
 
-
 @app.post("/resolve", tags=["Agents"])
 async def resolve(req: ResolveRequest, _user=Depends(require_auth)):
     return await _resolver.run(req.title, req.description, req.analysis, req.riskAssessment)
-
 
 class LearnRequest(BaseModel):
     ticket_id:   str
@@ -248,7 +230,6 @@ class LearnRequest(BaseModel):
     @classmethod
     def cap_steps(cls, v: list) -> list:
         return [s[:500] for s in v[:20]]
-
 
 @app.post("/learn", tags=["Learning"])
 async def learn_from_ticket(req: LearnRequest, _user=Depends(require_auth)):

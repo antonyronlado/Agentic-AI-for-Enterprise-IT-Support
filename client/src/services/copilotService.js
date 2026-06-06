@@ -27,10 +27,10 @@ export async function getCopilotSuggestions({ ticket_id, title, description, ana
 export async function uploadMultimodalFile(file) {
   const formData = new FormData();
   formData.append("file", file);
-  // Note: do NOT set Content-Type — browser sets multipart/form-data with boundary automatically
+
   const res = await fetch(`${API_URL}/multimodal/upload`, {
     method: "POST",
-    headers: authHeaders(),   // adds Authorization header only
+    headers: authHeaders(),
     body: formData,
   });
   if (!res.ok) {

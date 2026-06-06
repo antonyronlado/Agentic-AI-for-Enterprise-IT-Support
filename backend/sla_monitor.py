@@ -2,11 +2,9 @@ import asyncio
 
 from datetime import datetime
 
-
 SLA_OPEN_SEC        = 30 * 60
 SLA_IN_PROGRESS_SEC = 4 * 60 * 60
 CHECK_INTERVAL_SEC  = 5 * 60
-
 
 async def run_sla_monitor(get_db_func):
     print("[SLA Monitor] Starting — checking every 5 minutes.")
@@ -19,7 +17,6 @@ async def run_sla_monitor(get_db_func):
             break
         except Exception as exc:
             print(f"[SLA Monitor ERROR] {type(exc).__name__}: {exc}")
-
 
 async def _check_sla(get_db_func):
     db  = await get_db_func()

@@ -7,7 +7,6 @@ from auth_deps import require_admin
 
 router = APIRouter(prefix="/automation", tags=["Automation"])
 
-
 @router.get("/actions")
 async def list_actions(
     db=Depends(get_db),
@@ -19,14 +18,13 @@ async def list_actions(
         actions.append(a)
     return actions
 
-
 @router.post("/approve/{action_id}")
 async def approve_action(
     action_id: str,
     db=Depends(get_db),
     user=Depends(require_admin),
 ):
-    # approved_by comes from the verified auth token — not the request body
+
     approved_by = user.get("username", str(user.get("_id", "admin")))
 
     try:
@@ -72,7 +70,6 @@ async def approve_action(
         updated["_id"] = str(updated["_id"])
     return {"message": f"Action '{action.get('name')}' approved and executed", "action": updated}
 
-
 @router.post("/reject/{action_id}")
 async def reject_action(
     action_id: str,
@@ -110,7 +107,6 @@ async def reject_action(
         "timestamp": now,
     })
     return {"message": f"Action '{action.get('name')}' rejected"}
-
 
 @router.post("/rollback/{action_id}")
 async def rollback_action(

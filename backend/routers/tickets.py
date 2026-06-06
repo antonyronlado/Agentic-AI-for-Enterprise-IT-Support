@@ -7,6 +7,17 @@ from bson import ObjectId
 
 from database import get_db
 from auth_deps import require_auth, require_admin
+from agents.sanitization_agent import SanitizationAgent
+from services.email_service import email_service
+from services.password_reset_service import (
+    extract_requested_password,
+    apply_password_reset,
+    validate_preferred_password,
+    is_password_reset_request,
+    AWAITING_CONFIRM_MESSAGE,
+)
+
+_sanitizer = SanitizationAgent()
 
 router = APIRouter(prefix="/tickets", tags=["Tickets"])
 
@@ -20,7 +31,10 @@ class TicketCreate(BaseModel):
     description: str
     userId:      str
     userEmail:   str
-    targetWebsite: Optional[str] = None   # Website name for password reset tickets
+    targetWebsite: Optional[str] = None
+    allowAiPasswordReset: Optional[bool] = False
+    passwordResetMode: Optional[str] = "auto"
+    preferredPassword: Optional[str] = None
 
     @field_validator("title")
     @classmethod
@@ -40,9 +54,6 @@ class TicketCreate(BaseModel):
 
 
 class TicketUpdate(BaseModel):
-    """Strict allow-list of fields that may be updated via the API.
-    Prevents clients from overwriting admin_response, risk data, etc.
-    """
     status:           Optional[str]  = None
     priority:         Optional[str]  = None
     history:          Optional[List[dict]] = None
@@ -53,7 +64,8 @@ class TicketUpdate(BaseModel):
     @classmethod
     def valid_status(cls, v):
         if v is not None and v not in {
-            "open", "in_progress", "resolved", "escalated", "failed", "linked"
+            "open", "in_progress", "resolved", "escalated", "failed", "linked",
+            "awaiting_password_confirm",
         }:
             raise ValueError(f"Invalid status: {v}")
         return v
@@ -76,6 +88,13 @@ class FeedbackRequest(BaseModel):
         if v:
             return v[:1000]
         return v
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    allow: bool = True
+    userId: Optional[str] = None
+    passwordResetMode: Optional[str] = "auto"
+    preferredPassword: Optional[str] = None
 
 
 class TicketOut(BaseModel):
@@ -107,12 +126,14 @@ class TicketOut(BaseModel):
     master_incident_id:   Optional[str] = None
     remediation_action:   Optional[Any] = None
     feedback:             Optional[Any] = None
-    # Linked / dedup ticket enrichment fields
     workaround_steps:     Optional[List[str]] = None
     canonical_incident_id: Optional[str] = None
     canonical_status:     Optional[str] = None
     eta_label:            Optional[str] = None
     eta_minutes:          Optional[int] = None
+    temporary_password:   Optional[str] = None
+    password_reset_consent: Optional[bool] = None
+    password_reset_mode:  Optional[str] = None
 
     model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
 
@@ -125,6 +146,11 @@ _ADMIN_ONLY_FIELDS = {
 
 
 def _filter_for_role(ticket: dict, role: str) -> dict:
+    ticket["title"] = _sanitizer.sanitize(ticket.get("title", ""))
+    ticket["description"] = _sanitizer.sanitize(ticket.get("description", ""))
+    ticket["userEmail"] = _sanitizer.sanitize(ticket.get("userEmail", ""))
+    if ticket.get("websiteLink"):
+        ticket["websiteLink"] = _sanitizer.sanitize(ticket["websiteLink"])
     if role == "admin":
         return ticket
     for field in _ADMIN_ONLY_FIELDS:
@@ -165,8 +191,30 @@ async def create_ticket(
     from main import _analyzer, _risk_agent, _escalation_agent, _resolver, _kb, _model_loader
 
     now = int(datetime.now().timestamp() * 1000)
+
+    raw_title = ticket.title
+    raw_description = ticket.description
+    is_pwd_issue = is_password_reset_request(raw_title, raw_description)
+    allow_reset = bool(ticket.allowAiPasswordReset) if is_pwd_issue else False
+    reset_mode = ticket.passwordResetMode or "auto"
+    preferred_from_form = None
+    if is_pwd_issue and allow_reset and reset_mode == "custom":
+        err = validate_preferred_password(ticket.preferredPassword)
+        if err:
+            raise HTTPException(status_code=400, detail=err)
+        preferred_from_form = ticket.preferredPassword.strip()
+    requested_password = preferred_from_form or extract_requested_password(raw_description)
+
+    title = _sanitizer.sanitize(raw_title)
+    description = _sanitizer.sanitize(raw_description)
+    website_link = _sanitizer.sanitize(ticket.targetWebsite or "")
+
     ticket_dict = ticket.model_dump()
     ticket_dict.update({
+        "title":             title,
+        "description":       description,
+        "userEmail":         ticket.userEmail,
+        "targetWebsite":     website_link if website_link else None,
         "status":            "open",
         "priority":          "medium",
         "category":          "other",
@@ -184,7 +232,8 @@ async def create_ticket(
         "linked_count":      0,
         "remediation_action": None,
         "feedback":          None,
-        "targetWebsite":     ticket.targetWebsite,
+        "password_reset_consent": allow_reset if is_pwd_issue else None,
+        "password_reset_mode": reset_mode if is_pwd_issue and allow_reset else None,
         "history": [{
             "timestamp": now,
             "status":    "open",
@@ -199,22 +248,36 @@ async def create_ticket(
         "action":    "ticket_created",
         "agent":     "system",
         "ticket_id": str(new_ticket.inserted_id),
-        "details":   f"Ticket '{ticket.title}' created by '{ticket.userId}'.",
+        "details":   f"Ticket '{title}' created by '{ticket.userId}'.",
         "timestamp": now,
     })
 
     background_tasks.add_task(
         _run_orchestrated_pipeline,
         new_ticket.inserted_id,
-        ticket.title,
-        ticket.description,
+        title,
+        description,
+        raw_title,
+        raw_description,
+        ticket.userId,
         ticket.userEmail,
+        requested_password,
+        allow_reset,
+        reset_mode,
+        preferred_from_form is not None,
         ticket.targetWebsite,
         _analyzer, _risk_agent, _escalation_agent, _resolver, _kb, _model_loader,
     )
 
     if created:
         created["_id"] = str(created["_id"])
+        background_tasks.add_task(
+            email_service.send_status_update,
+            ticket.userEmail,
+            str(new_ticket.inserted_id),
+            title,
+            "open"
+        )
     return created
 
 
@@ -241,13 +304,11 @@ async def update_ticket(
     db=Depends(get_db),
     _user=Depends(require_auth),
 ):
-    """Only fields declared in TicketUpdate may be changed via this endpoint."""
     try:
         oid = ObjectId(ticket_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid ticket ID")
 
-    # Exclude unset fields so we only $set what was actually provided
     payload = update_data.model_dump(exclude_unset=True, exclude_none=True)
     if not payload:
         raise HTTPException(status_code=400, detail="No valid fields provided for update")
@@ -258,6 +319,17 @@ async def update_ticket(
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Ticket not found")
+
+    if "status" in payload:
+        ticket = await db.tickets.find_one({"_id": oid})
+        if ticket and ticket.get("userEmail"):
+            await email_service.send_status_update(
+                ticket["userEmail"],
+                ticket_id,
+                ticket.get("title", "Ticket"),
+                payload["status"]
+            )
+
     return {"message": "Ticket updated successfully"}
 
 
@@ -299,9 +371,92 @@ async def submit_feedback(
     return {"message": "Feedback recorded. Thank you — this improves future AI accuracy."}
 
 
+@router.post("/{ticket_id}/password-reset/confirm")
+async def confirm_password_reset(
+    ticket_id: str,
+    req: PasswordResetConfirmRequest,
+    db=Depends(get_db),
+    _user=Depends(require_auth),
+):
+    if not req.allow:
+        raise HTTPException(status_code=400, detail="You must allow AI password reset to continue")
+
+    try:
+        oid = ObjectId(ticket_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ticket ID")
+
+    ticket = await db.tickets.find_one({"_id": oid})
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    if req.userId and ticket.get("userId") != req.userId:
+        raise HTTPException(status_code=403, detail="Not authorized for this ticket")
+
+    mode = req.passwordResetMode or "auto"
+    preferred = None
+    user_chosen = False
+    if mode == "custom":
+        err = validate_preferred_password(req.preferredPassword)
+        if err:
+            raise HTTPException(status_code=400, detail=err)
+        preferred = req.preferredPassword.strip()
+        user_chosen = True
+
+    result = await apply_password_reset(
+        db,
+        user_id=ticket.get("userId"),
+        user_email=ticket.get("userEmail"),
+        requested_password=preferred,
+        user_chosen=user_chosen,
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Password reset failed"))
+
+    now = int(datetime.now().timestamp() * 1000)
+    await db.tickets.update_one(
+        {"_id": oid},
+        {
+            "$set": {
+                "status": "resolved",
+                "employee_response": result["employee_response"],
+                "admin_response": result["admin_response"],
+                "temporary_password": result["new_password"],
+                "password_reset_consent": True,
+                "password_reset_mode": mode,
+                "updatedAt": now,
+            },
+            "$push": {
+                "history": {
+                    "timestamp": now,
+                    "status": "resolved",
+                    "message": "User confirmed AI password reset.",
+                }
+            },
+        },
+    )
+    await db.admin_logs.insert_one({
+        "action": "password_reset_confirmed",
+        "agent": "UserConfirmation",
+        "ticket_id": ticket_id,
+        "details": f"User confirmed password reset (mode={mode}).",
+        "timestamp": now,
+    })
+
+    updated = await db.tickets.find_one({"_id": oid})
+    updated["_id"] = str(updated["_id"])
+    return {
+        "message": "Password reset complete",
+        "temporary_password": result["new_password"],
+        "ticket": _filter_for_role(updated, "user"),
+    }
+
+
 async def _run_orchestrated_pipeline(
     ticket_id, title, description,
-    user_email, target_website,
+    raw_title, raw_description,
+    user_id, user_email, requested_password,
+    allow_ai_password_reset, password_reset_mode, user_chosen_password,
+    target_website,
     _analyzer, _risk_agent, _escalation_agent, _resolver, _kb, _model_loader,
 ):
     from database import get_db
@@ -316,4 +471,15 @@ async def _run_orchestrated_pipeline(
         kb=_kb,
         model_loader=_model_loader,
     )
-    await orchestrator.run_pipeline(ticket_id, title, description, db, user_email=user_email, target_website=target_website)
+    await orchestrator.run_pipeline(
+        ticket_id, title, description, db,
+        user_email=user_email,
+        target_website=target_website,
+        raw_title=raw_title,
+        raw_description=raw_description,
+        user_id=user_id,
+        requested_password=requested_password,
+        allow_ai_password_reset=allow_ai_password_reset,
+        password_reset_mode=password_reset_mode,
+        user_chosen_password=user_chosen_password,
+    )

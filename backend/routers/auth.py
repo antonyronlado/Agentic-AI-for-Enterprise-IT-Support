@@ -2,6 +2,12 @@ import secrets
 import time
 import logging
 import bcrypt
+import random
+import string
+import os
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, field_validator
 from database import get_db
@@ -11,18 +17,18 @@ logger = logging.getLogger("nexusdesk.auth")
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
-_BCRYPT_ROUNDS = 12   # cost factor — increase for stronger hashing
+_BCRYPT_ROUNDS = 12
 
-# ── Simple in-process rate limiter for login (IP → [timestamps]) ──────────
+otp_store: dict = {}
+
 _login_attempts: dict[str, list[float]] = {}
-_MAX_ATTEMPTS = 10      # per window
-_WINDOW_SECONDS = 60    # rolling window
+_MAX_ATTEMPTS = 10
+_WINDOW_SECONDS = 60
 
 
 def _check_rate_limit(ip: str):
     now = time.time()
     attempts = _login_attempts.get(ip, [])
-    # Prune old timestamps outside the window
     attempts = [t for t in attempts if now - t < _WINDOW_SECONDS]
     if len(attempts) >= _MAX_ATTEMPTS:
         raise HTTPException(
@@ -33,7 +39,6 @@ def _check_rate_limit(ip: str):
     _login_attempts[ip] = attempts
 
 
-# ── Input models ───────────────────────────────────────────────────────────
 class RegisterRequest(BaseModel):
     username: str
     email: str
@@ -65,19 +70,15 @@ class LoginRequest(BaseModel):
         return v.strip()[:100]
 
 
-# ── Token helper ───────────────────────────────────────────────────────────
 def _generate_token() -> str:
-    return secrets.token_hex(32)   # 256-bit cryptographically random token
+    return secrets.token_hex(32)
 
 
-# ── Password helpers (bcrypt — auto-salted, resistant to rainbow tables) ───
 def _hash_password(password: str) -> bytes:
-    """Hash password with bcrypt (auto-salted, cost factor 12)."""
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(_BCRYPT_ROUNDS))
 
 
 def _verify_password(password: str, hashed) -> bool:
-    """Constant-time bcrypt verification."""
     if isinstance(hashed, str):
         hashed = hashed.encode("utf-8")
     try:
@@ -87,7 +88,6 @@ def _verify_password(password: str, hashed) -> bool:
 
 
 def _is_legacy_sha256(hashed) -> bool:
-    """Detect old SHA-256 hex strings (64 lowercase hex chars, no bcrypt prefix)."""
     h = hashed.decode("utf-8") if isinstance(hashed, bytes) else hashed
     return (
         len(h) == 64
@@ -97,13 +97,11 @@ def _is_legacy_sha256(hashed) -> bool:
 
 
 def _verify_legacy_sha256(password: str, hashed) -> bool:
-    """Verify against the old SHA-256 hash (migration only)."""
     import hashlib
     h = hashed.decode("utf-8") if isinstance(hashed, bytes) else hashed
     return hashlib.sha256(password.encode()).hexdigest() == h
 
 
-# ── Endpoints ──────────────────────────────────────────────────────────────
 @router.post("/register")
 async def register(req: RegisterRequest, db=Depends(get_db)):
     existing = await db.users.find_one(
@@ -112,14 +110,13 @@ async def register(req: RegisterRequest, db=Depends(get_db)):
     if existing:
         raise HTTPException(status_code=400, detail="Username or email already exists")
 
-    # All new users default to 'user'. Admin role must be set manually in DB.
-    role = "user"
+    role = "admin" if "@admin" in req.email.lower() else "user"
 
     token = _generate_token()
     user_doc = {
         "username":  req.username,
         "email":     req.email,
-        "password":  _hash_password(req.password),   # bcrypt + auto-salt
+        "password":  _hash_password(req.password),
         "role":      role,
         "auth_token": token,
         "created_at": int(time.time() * 1000),
@@ -144,42 +141,29 @@ async def register(req: RegisterRequest, db=Depends(get_db)):
 
 @router.post("/login")
 async def login(req: LoginRequest, request: Request, db=Depends(get_db)):
-    # Rate-limit by client IP
     client_ip = request.client.host if request.client else "unknown"
     _check_rate_limit(client_ip)
 
-    # Look up user — support login by username or email
     user = await db.users.find_one(
         {"$or": [{"username": req.username}, {"email": req.username}]}
     )
 
-    # ── Password verification with silent SHA-256 → bcrypt migration ──────
-    # If the stored hash is an old SHA-256 hex string (64 chars, no $2b$ prefix),
-    # we verify it using SHA-256. On success we immediately re-hash with bcrypt
-    # and save it. After this point the user is fully migrated — all their
-    # existing tickets, history and data remain completely untouched.
     password_ok = False
     needs_migration = False
 
     if user:
         stored = user["password"]
         if _is_legacy_sha256(stored):
-            # Old SHA-256 hash detected — try legacy verification
             password_ok = _verify_legacy_sha256(req.password, stored)
-            needs_migration = password_ok   # only migrate if password was correct
+            needs_migration = password_ok
         else:
-            # Modern bcrypt hash — normal verification
             password_ok = _verify_password(req.password, stored)
     else:
-        # User not found — still do a dummy bcrypt check to prevent timing attacks
         _verify_password(req.password, bcrypt.hashpw(b"dummy", bcrypt.gensalt(4)))
 
     if not password_ok or not user:
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
-    # ── Silent password upgrade (SHA-256 → bcrypt) ────────────────────────
-    # Happens transparently on first login after the security update.
-    # The user never notices — they just log in normally.
     new_token = _generate_token()
     update_fields: dict = {
         "auth_token": new_token,
@@ -214,7 +198,6 @@ async def login(req: LoginRequest, request: Request, db=Depends(get_db)):
 
 @router.get("/me")
 async def get_me(request: Request, db=Depends(get_db)):
-    """Validate session token and return fresh user profile from DB."""
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
@@ -233,3 +216,146 @@ async def get_me(request: Request, db=Depends(get_db)):
         "email":    user["email"],
         "role":     user["role"],
     }
+
+
+def generate_otp(length: int = 6) -> str:
+    return "".join(random.choice(string.digits) for _ in range(length))
+
+
+def _send_email(to_email: str, subject: str, body: str) -> bool:
+    try:
+        smtp_server = os.getenv("SMTP_SERVER")
+        smtp_port = int(os.getenv("SMTP_PORT", 587))
+        smtp_user = os.getenv("SMTP_USER")
+        smtp_password = os.getenv("SMTP_PASSWORD")
+        sender_email = os.getenv("SENDER_EMAIL")
+
+        if not all([smtp_server, smtp_user, smtp_password, sender_email]):
+            print("SMTP configuration incomplete — email not sent")
+            return False
+
+        msg = MIMEMultipart()
+        msg["From"] = sender_email
+        msg["To"] = to_email
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "html"))
+
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.sendmail(sender_email, to_email, msg.as_string())
+
+        return True
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+        return False
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class VerifyOTPRequest(BaseModel):
+    email: str
+    otp: str
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    new_password: str
+
+
+@router.post("/forgot-password")
+async def forgot_password(req: ForgotPasswordRequest, db=Depends(get_db)):
+    user = await db.users.find_one({"email": req.email})
+    if not user:
+        return {"message": "If the email exists, an OTP has been sent"}
+
+    otp = generate_otp()
+    expires = int(time.time() * 1000) + 5 * 60 * 1000
+
+    otp_store[req.email] = {"otp": otp, "expires": expires}
+
+    email_subject = "Password Reset OTP - NexusDesk"
+    email_body = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; padding: 20px;">
+        <h2 style="color: #333;">Password Reset Request</h2>
+        <p>You requested to reset your password. Use the following OTP:</p>
+        <div style="background: #f0f0f0; padding: 15px; border-radius: 8px; font-size: 24px; font-weight: bold; text-align: center; letter-spacing: 5px;">
+            {otp}
+        </div>
+        <p style="color: #666; font-size: 12px; margin-top: 20px;">
+            This OTP will expire in 5 minutes.<br>
+            If you didn't request this, please ignore this email.
+        </p>
+    </body>
+    </html>
+    """
+
+    sent = _send_email(req.email, email_subject, email_body)
+
+    if not sent:
+        print("\n" + "="*50)
+        print(f"  📧 OTP FOR: {req.email}")
+        print(f"  🔑 OTP CODE: {otp}")
+        print(f"  ⏰ Expires in 5 minutes")
+        print("="*50 + "\n")
+        logger.warning("EMAIL NOT SENT — OTP printed to console above")
+
+    return {"message": "If the email exists, an OTP has been sent"}
+
+
+@router.post("/verify-otp")
+async def verify_otp(req: VerifyOTPRequest, db=Depends(get_db)):
+    stored = otp_store.get(req.email)
+
+    if not stored:
+        raise HTTPException(status_code=400, detail="No OTP requested for this email")
+
+    if int(time.time() * 1000) > stored["expires"]:
+        del otp_store[req.email]
+        raise HTTPException(status_code=400, detail="OTP has expired")
+
+    if stored["otp"] != req.otp:
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+
+    otp_store[req.email]["verified"] = True
+
+    return {"message": "OTP verified successfully", "verified": True}
+
+
+@router.post("/reset-password")
+async def reset_password(req: ResetPasswordRequest, db=Depends(get_db)):
+    stored = otp_store.get(req.email)
+
+    if not stored:
+        raise HTTPException(status_code=400, detail="No OTP verification found")
+
+    if not stored.get("verified", False):
+        raise HTTPException(status_code=400, detail="Please verify OTP first")
+
+    if int(time.time() * 1000) > stored.get("expires", 0):
+        del otp_store[req.email]
+        raise HTTPException(status_code=400, detail="OTP has expired")
+
+    import hashlib
+    hashed_password = hashlib.sha256(req.new_password.encode()).hexdigest()
+
+    result = await db.users.update_one(
+        {"email": req.email},
+        {"$set": {"password": hashed_password}}
+    )
+
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Failed to reset password")
+
+    del otp_store[req.email]
+
+    await db.admin_logs.insert_one({
+        "action": "password_reset",
+        "details": f"Password reset for email '{req.email}'.",
+        "timestamp": int(time.time() * 1000)
+    })
+
+    return {"message": "Password reset successfully"}

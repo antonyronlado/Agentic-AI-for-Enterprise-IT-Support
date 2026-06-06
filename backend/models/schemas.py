@@ -1,18 +1,15 @@
 from typing import Optional, Any, List
 from pydantic import BaseModel, Field, ConfigDict
 
-
 class TicketCreate(BaseModel):
     title: str
     description: str
     userId: str
     userEmail: str
 
-
 class TicketFeedback(BaseModel):
     rating: str
     comment: Optional[str] = None
-
 
 class TicketOut(BaseModel):
     id: str = Field(alias="_id")
@@ -47,7 +44,6 @@ class TicketOut(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
 
-
 class CopilotRequest(BaseModel):
     ticket_id: str
     title: str
@@ -55,15 +51,12 @@ class CopilotRequest(BaseModel):
     analysis: Optional[Any] = None
     risk: Optional[Any] = None
 
-
 class RemediationApproveRequest(BaseModel):
     approved_by: str
-
 
 class FeedbackRequest(BaseModel):
     rating: str
     comment: Optional[str] = None
-
 
 class UploadAnalysisResult(BaseModel):
     extracted_text: str
@@ -71,7 +64,6 @@ class UploadAnalysisResult(BaseModel):
     probable_cause: str
     confidence: int
     file_type: str
-
 
 class IncidentCluster(BaseModel):
     id: str
@@ -84,7 +76,6 @@ class IncidentCluster(BaseModel):
     cluster_confidence: int
     created_at: int
     status: str
-
 
 class KBArticle(BaseModel):
     id: str = Field(alias="_id")

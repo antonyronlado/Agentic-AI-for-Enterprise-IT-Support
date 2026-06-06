@@ -8,7 +8,6 @@ _MINILM_DIR = _CACHE_DIR / "all-MiniLM-L6-v2"
 _BART_DIR = _CACHE_DIR / "bart-large-mnli"
 _CACHE_DIR.mkdir(exist_ok=True)
 
-
 def _ensure_minilm() -> str:
     if not (_MINILM_DIR / "config.json").exists():
         snapshot_download(
@@ -18,7 +17,6 @@ def _ensure_minilm() -> str:
         )
     return str(_MINILM_DIR)
 
-
 def _ensure_bart() -> str:
     if not (_BART_DIR / "config.json").exists():
         snapshot_download(
@@ -27,7 +25,6 @@ def _ensure_bart() -> str:
             ignore_patterns=["*.msgpack", "flax_model*", "tf_model*", "rust_model*", "*.ot"],
         )
     return str(_BART_DIR)
-
 
 class ModelLoader:
     def __init__(self):

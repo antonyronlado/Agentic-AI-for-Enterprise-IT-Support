@@ -141,7 +141,6 @@ _ACTIONS = {
     },
 }
 
-
 def _match_action(title: str, description: str, category: str) -> dict | None:
     text = f"{title} {description}".lower()
     cat = category.lower()
@@ -155,7 +154,6 @@ def _match_action(title: str, description: str, category: str) -> dict | None:
             best_score = score
             best_match = action
     return best_match
-
 
 class RemediationAgent:
     async def evaluate(
@@ -221,7 +219,6 @@ class RemediationAgent:
             extra_audit = []
             reset_result = None
 
-            # ── Live password reset for password_reset action ──────────────────
             if action["id"] == "password_reset" and user_email and target_website:
                 reset_result = await self._call_website_reset(
                     target_website, user_email, db
@@ -277,10 +274,7 @@ class RemediationAgent:
         }
 
     async def _call_website_reset(self, target_website: str, user_email: str, db) -> dict:
-        """
-        Look up the target website in the registry and call its password reset API.
-        Returns the API response dict.
-        """
+
         try:
             site = await db.websites.find_one(
                 {"name": {"$regex": f"^{target_website}$", "$options": "i"}}

@@ -4,7 +4,6 @@ from bson import ObjectId
 
 logger = logging.getLogger("nexusdesk.services.kb")
 
-
 def _extract_tags(title: str, description: str, category: str) -> list[str]:
     tags = [category]
     stop_words = {
@@ -22,7 +21,6 @@ def _extract_tags(title: str, description: str, category: str) -> list[str]:
         if len(tags) >= 8:
             break
     return tags
-
 
 class KBService:
     def __init__(self, model_loader, kb_loader):

@@ -12,7 +12,6 @@ except ImportError:
     SKLEARN_AVAILABLE = False
     logger.warning("scikit-learn not available — RCA clustering disabled")
 
-
 def _derive_root_cause(tickets: list[dict]) -> tuple[str, str]:
     categories = [t.get("category", "other") for t in tickets]
     majority_cat = max(set(categories), key=categories.count)
@@ -39,7 +38,6 @@ def _derive_root_cause(tickets: list[dict]) -> tuple[str, str]:
         "other": "Multiple users reporting similar issues — possible shared service disruption",
     }
     return cause_map.get(top_pattern, cause_map["other"]), majority_cat
-
 
 class RCAAgent:
     def __init__(self, model_loader):

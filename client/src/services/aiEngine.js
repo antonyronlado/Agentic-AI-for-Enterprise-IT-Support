@@ -1,6 +1,5 @@
 const API_URL = import.meta.env.VITE_AI_ENGINE_URL || "http://localhost:8000";
 
-// ── Token helpers ─────────────────────────────────────────────────────────
 export function getToken() {
   return localStorage.getItem("nexus_token") || null;
 }
@@ -10,7 +9,6 @@ export function setToken(token) {
   else localStorage.removeItem("nexus_token");
 }
 
-// ── Base fetch with auth header ────────────────────────────────────────────
 async function fetchAPI(endpoint, options = {}) {
   const token = getToken();
   const headers = {
@@ -25,20 +23,18 @@ async function fetchAPI(endpoint, options = {}) {
   });
 
   if (!res.ok) {
-    // Parse error details without exposing raw server internals to the UI
     let errMsg = `Request failed (${res.status})`;
     try {
       const body = await res.json();
       errMsg = body.detail || body.error || errMsg;
-    } catch {
-      // ignore parse errors
+    } catch (e) {
+      // ignore
     }
     throw new Error(errMsg);
   }
   return res.json();
 }
 
-// ── Auth ──────────────────────────────────────────────────────────────────
 export function login(username, password) {
   return fetchAPI("/auth/login", {
     method: "POST",
@@ -53,12 +49,31 @@ export function register(username, email, password) {
   });
 }
 
-/** Validate the stored token and get fresh user profile from server */
 export function getMe() {
   return fetchAPI("/auth/me");
 }
 
-// ── Tickets ───────────────────────────────────────────────────────────────
+export function requestPasswordResetOTP(email) {
+  return fetchAPI("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function verifyOTP(email, otp) {
+  return fetchAPI("/auth/verify-otp", {
+    method: "POST",
+    body: JSON.stringify({ email, otp }),
+  });
+}
+
+export function resetPassword(email, newPassword) {
+  return fetchAPI("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ email, new_password: newPassword }),
+  });
+}
+
 export function getTickets(userId, role = "user") {
   const query = userId ? `?userId=${userId}&role=${role}` : `?role=${role}`;
   return fetchAPI(`/tickets${query}`);
@@ -86,14 +101,24 @@ export function submitFeedback(ticketId, rating, comment = null) {
   });
 }
 
-// ── Logs ──────────────────────────────────────────────────────────────────
+export function confirmPasswordReset(ticketId, { userId, passwordResetMode = "auto", preferredPassword = null }) {
+  return fetchAPI(`/tickets/${ticketId}/password-reset/confirm`, {
+    method: "POST",
+    body: JSON.stringify({
+      allow: true,
+      userId,
+      passwordResetMode,
+      preferredPassword,
+    }),
+  });
+}
+
 export function getLogs(limit = 100, ticketId = null) {
   const params = new URLSearchParams({ limit: Math.min(limit, 500) });
   if (ticketId) params.set("ticket_id", ticketId);
   return fetchAPI(`/logs?${params.toString()}`);
 }
 
-// ── Incidents ─────────────────────────────────────────────────────────────
 export function getIncidents() {
   return fetchAPI("/incidents");
 }
@@ -124,13 +149,11 @@ export function submitKBFeedback(articleId, rating) {
   });
 }
 
-// ── Automation ────────────────────────────────────────────────────────────
 export function getRemediationActions() {
   return fetchAPI("/automation/actions");
 }
 
 export function approveAction(actionId) {
-  // approved_by is now determined server-side from the auth token
   return fetchAPI(`/automation/approve/${actionId}`, { method: "POST" });
 }
 
@@ -142,7 +165,6 @@ export function rollbackAction(actionId) {
   return fetchAPI(`/automation/rollback/${actionId}`, { method: "POST" });
 }
 
-// ── Learning ──────────────────────────────────────────────────────────────
 export function learnFromTicket(ticketId, title, description, steps, result, category) {
   return fetchAPI("/learn", {
     method: "POST",
@@ -150,7 +172,6 @@ export function learnFromTicket(ticketId, title, description, steps, result, cat
   });
 }
 
-// ── Website Registry ──────────────────────────────────────────────────────
 export async function getWebsites() {
   try {
     const res = await fetch(`${API_URL}/websites/public`, {

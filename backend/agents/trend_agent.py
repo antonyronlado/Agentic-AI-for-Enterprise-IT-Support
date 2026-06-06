@@ -6,7 +6,6 @@ logger = logging.getLogger("nexusdesk.agent.trend")
 SPIKE_MULTIPLIER = 2.0
 RECURRING_THRESHOLD = 3
 
-
 class TrendAgent:
     def __init__(self):
         self._cache: dict = {}

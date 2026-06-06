@@ -8,7 +8,6 @@ logger = logging.getLogger("nexusdesk.agent.dedup")
 DEDUP_THRESHOLD = 0.78
 LINK_THRESHOLD  = 0.65
 
-
 class DedupAgent:
     def __init__(self, model_loader, kb_loader):
         self.model_loader = model_loader

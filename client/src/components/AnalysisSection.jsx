@@ -4,9 +4,6 @@ import {
   ShieldAlert, Lock, Zap, ChevronRight,
 } from 'lucide-react';
 
-// ─────────────────────────────────────────────────────────
-//  Confidence bar shown inside NLP section
-// ─────────────────────────────────────────────────────────
 function ConfidenceBar({ score, label }) {
   if (score == null) return null;
   const pct   = Math.min(100, Math.max(0, score));
@@ -34,9 +31,6 @@ function ConfidenceBar({ score, label }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────
-//  Individual analysis section block
-// ─────────────────────────────────────────────────────────
 const SECTION_META = {
   'NLP ANALYSIS': {
     icon: Brain,
@@ -49,7 +43,7 @@ const SECTION_META = {
     accent: 'border-amber-200/80 bg-gradient-to-br from-amber-50/60 to-orange-50/30',
     headerColor: 'text-amber-700',
     iconBg: 'bg-amber-100',
-    // dynamic — overridden by risk level
+
   },
   'RESOLUTION PATH': {
     icon: CheckCircle2,
@@ -69,7 +63,6 @@ function AnalysisSectionBlock({ header, body, index, riskLevel }) {
   const meta = SECTION_META[header] || SECTION_META['NLP ANALYSIS'];
   const Icon = meta.icon;
 
-  // Dynamically adjust Risk Assessment colors based on riskLevel
   let accent       = meta.accent;
   let headerColor  = meta.headerColor;
   let iconBg       = meta.iconBg;
@@ -89,7 +82,6 @@ function AnalysisSectionBlock({ header, body, index, riskLevel }) {
     }
   }
 
-  // Format body lines as a structured list if they contain numbered items
   const lines = body.split('\n').filter(Boolean);
 
   return (
@@ -99,7 +91,7 @@ function AnalysisSectionBlock({ header, body, index, riskLevel }) {
       transition={{ duration: 0.3, delay: index * 0.08, ease: [0.4, 0, 0.2, 1] }}
       className={`rounded-xl border p-4 space-y-3 ${accent}`}
     >
-      {/* Header */}
+      {}
       <div className="flex items-center gap-2">
         <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${iconBg}`}>
           <Icon className={`w-3.5 h-3.5 ${headerColor}`} />
@@ -109,10 +101,10 @@ function AnalysisSectionBlock({ header, body, index, riskLevel }) {
         </p>
       </div>
 
-      {/* Body */}
+      {}
       <div className="space-y-1.5">
         {lines.map((line, i) => {
-          // Numbered step or bullet
+
           const numbered = /^\d+\.\s/.test(line);
           const keyval   = /^[\w\s]+:\s/.test(line) && !numbered;
 
@@ -156,9 +148,6 @@ function AnalysisSectionBlock({ header, body, index, riskLevel }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────
-//  Risk summary card (standalone, used above tabs)
-// ─────────────────────────────────────────────────────────
 export function RiskSummaryCard({ risk, confidenceScore, updatedAt }) {
   if (!risk) return null;
   const level = risk.risk_level || risk.impact || 'low';
@@ -231,9 +220,6 @@ export function RiskSummaryCard({ risk, confidenceScore, updatedAt }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────
-//  Full risk assessment tab
-// ─────────────────────────────────────────────────────────
 export function RiskAssessmentPanel({ risk, confidenceScore }) {
   if (!risk) return (
     <div className="rounded-xl border border-slate-200 bg-white p-12 text-center">
@@ -291,7 +277,7 @@ export function RiskAssessmentPanel({ risk, confidenceScore }) {
         )}
       </div>
 
-      {/* Metric grid */}
+      {}
       <div className="grid grid-cols-2 gap-2">
         {metrics.map(m => (
           <div key={m.label} className="rounded-lg bg-white/80 border border-white p-3 space-y-1">
@@ -322,9 +308,6 @@ export function RiskAssessmentPanel({ risk, confidenceScore }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────
-//  Main AnalysisSection — parses and renders admin response
-// ─────────────────────────────────────────────────────────
 export function AnalysisSection({ text, riskLevel }) {
   if (!text) return (
     <div className="rounded-xl border border-slate-100 bg-white p-12 text-center">
@@ -333,7 +316,6 @@ export function AnalysisSection({ text, riskLevel }) {
     </div>
   );
 
-  // Parse sections by [HEADER] pattern
   const rawSections = text.split('\n\n').filter(Boolean);
   const parsed = rawSections.map(section => {
     const match = section.match(/^\[([^\]]+)\]/);

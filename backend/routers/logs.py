@@ -8,15 +8,14 @@ router = APIRouter(prefix="/logs", tags=["Logs"])
 
 _MAX_LOG_LIMIT = 500
 
-
 @router.get("")
 async def get_logs(
     limit: int = 100,
     ticket_id: Optional[str] = None,
     db=Depends(get_db),
-    _user=Depends(require_admin),   # admin-only: logs contain sensitive audit data
+    _user=Depends(require_admin),
 ):
-    # Cap limit to prevent memory DoS
+
     safe_limit = max(1, min(limit, _MAX_LOG_LIMIT))
     query = {"ticket_id": ticket_id} if ticket_id else {}
     cursor = db.admin_logs.find(query).sort("timestamp", -1)
@@ -24,7 +23,6 @@ async def get_logs(
     for log in logs:
         log["_id"] = str(log["_id"])
     return logs
-
 
 async def create_log(
     action: str,

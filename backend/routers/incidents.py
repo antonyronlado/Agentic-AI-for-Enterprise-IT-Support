@@ -7,11 +7,9 @@ from auth_deps import require_auth, require_admin
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
 
-
 def _serialize(doc: dict) -> dict:
     doc["_id"] = str(doc["_id"])
     return doc
-
 
 @router.get("")
 async def list_incidents(
@@ -23,7 +21,6 @@ async def list_incidents(
         incidents.append(_serialize(inc))
     return incidents
 
-
 @router.post("/cluster")
 async def trigger_clustering(
     db=Depends(get_db),
@@ -34,7 +31,6 @@ async def trigger_clustering(
         raise HTTPException(status_code=503, detail="RCA agent not initialized")
     clusters = await _rca_agent.cluster_tickets(db)
     return {"clusters_found": len(clusters), "incidents": clusters}
-
 
 @router.get("/{incident_id}")
 async def get_incident(
@@ -67,7 +63,6 @@ async def get_incident(
     inc["tickets"] = tickets
     return inc
 
-
 @router.put("/{incident_id}/resolve")
 async def resolve_incident(
     incident_id: str,
@@ -87,7 +82,6 @@ async def resolve_incident(
         raise HTTPException(status_code=404, detail="Incident not found")
     return {"message": "Master incident resolved"}
 
-
 @router.get("/kb/articles")
 async def list_kb_articles(
     db=Depends(get_db),
@@ -98,7 +92,6 @@ async def list_kb_articles(
         a["_id"] = str(a["_id"])
         articles.append(a)
     return articles
-
 
 @router.get("/kb/articles/{article_id}")
 async def get_kb_article(
@@ -114,7 +107,6 @@ async def get_kb_article(
         raise HTTPException(status_code=404, detail="Article not found")
     article["_id"] = str(article["_id"])
     return article
-
 
 @router.post("/kb/articles/generate")
 async def generate_kb_article(
@@ -143,7 +135,6 @@ async def generate_kb_article(
         )
     article["_id"] = str(article["_id"])
     return article
-
 
 @router.post("/kb/articles/{article_id}/feedback")
 async def kb_article_feedback(

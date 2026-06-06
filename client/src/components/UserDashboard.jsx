@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from './AuthGuard';
-import { getTickets, deleteTicket, submitFeedback } from '../services/aiEngine';
+import { getTickets, deleteTicket, submitFeedback, confirmPasswordReset } from '../services/aiEngine';
 import { AIInputPanel } from './AIInputPanel';
 import { TicketTimeline } from './TicketTimeline';
 import { ShieldCheck, LogOut, ThumbsUp, ThumbsDown } from 'lucide-react';
@@ -51,9 +51,24 @@ export function UserDashboard() {
     }
   };
 
+  const handlePasswordConfirm = async (ticketId, { passwordResetMode, preferredPassword }) => {
+    if (!user) return;
+    try {
+      await confirmPasswordReset(ticketId, {
+        userId: user.uid,
+        passwordResetMode,
+        preferredPassword,
+      });
+      toast.success('Password reset complete — check your ticket for the new password.');
+      fetchTickets();
+    } catch (err) {
+      toast.error(err.message?.includes('400') ? 'Enter a valid password (min 6 characters).' : 'Password reset failed');
+    }
+  };
+
   const stats = {
     total:     tickets.length,
-    active:    tickets.filter(t => !['resolved', 'escalated', 'failed', 'linked'].includes(t.status)).length,
+    active:    tickets.filter(t => !['resolved', 'escalated', 'failed', 'linked', 'awaiting_password_confirm'].includes(t.status)).length,
     escalated: tickets.filter(t => t.status === 'escalated').length,
     resolved:  tickets.filter(t => t.status === 'resolved').length,
   };
@@ -121,6 +136,7 @@ export function UserDashboard() {
                 tickets={tickets}
                 onDelete={handleDelete}
                 onFeedback={handleFeedback}
+                onPasswordConfirm={handlePasswordConfirm}
                 loading={loading}
               />
             </div>

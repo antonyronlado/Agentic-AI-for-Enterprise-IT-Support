@@ -1,7 +1,6 @@
 from fastapi import Depends, HTTPException, Request
 from database import get_db
 
-
 async def _get_current_user(request: Request, db=Depends(get_db)) -> dict:
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
@@ -22,10 +21,8 @@ async def _get_current_user(request: Request, db=Depends(get_db)) -> dict:
         )
     return user
 
-
 async def require_auth(user: dict = Depends(_get_current_user)) -> dict:
     return user
-
 
 async def require_admin(user: dict = Depends(_get_current_user)) -> dict:
     if user.get("role") != "admin":

@@ -10,11 +10,9 @@ from models.user import UserModel, check_password
 
 auth_bp = Blueprint("auth", __name__)
 
-
 @auth_bp.route("/")
 def index():
     return render_template("index.html")
-
 
 @auth_bp.route("/register", methods=["GET", "POST"])
 def register():
@@ -43,7 +41,6 @@ def register():
     users.create(name, email, password)
     return redirect(url_for("auth.index") + "?registered=true")
 
-
 @auth_bp.route("/login", methods=["POST"])
 def login():
     email    = request.form.get("email", "").strip()
@@ -63,7 +60,6 @@ def login():
     set_access_cookies(response, token)
     return response
 
-
 @auth_bp.route("/dashboard")
 @jwt_required()
 def dashboard():
@@ -75,7 +71,6 @@ def dashboard():
         unset_jwt_cookies(response)
         return response
     return render_template("dashboard.html", user=user)
-
 
 @auth_bp.route("/change-password", methods=["POST"])
 @jwt_required()
@@ -103,7 +98,6 @@ def change_password():
     users.update_password(email, new_pw, temp=False)
 
     return redirect(url_for("auth.dashboard") + "?pw_changed=true")
-
 
 @auth_bp.route("/logout")
 def logout():

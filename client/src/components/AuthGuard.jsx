@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Shield, LogIn, Cpu, Zap, UserPlus, AlertCircle } from 'lucide-react';
+import { Shield, LogIn, Cpu, Zap, UserPlus, AlertCircle, ArrowLeft, Mail, Lock, KeyRound } from 'lucide-react';
 import { motion } from 'motion/react';
-import { login, register, getMe, setToken } from '../services/aiEngine';
+import { login, register, getMe, setToken, requestPasswordResetOTP, verifyOTP, resetPassword } from '../services/aiEngine';
 import { toast } from 'sonner';
 
 const AuthContext = createContext({
@@ -27,7 +27,13 @@ export function AuthProvider({ children }) {
   const [authLoading,   setAuthLoading]   = useState(false);
   const [authError,     setAuthError]     = useState('');
 
-  // ── Session restore — ALWAYS validate token server-side ──────────────
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotOTP, setForgotOTP] = useState('');
+  const [forgotNewPassword, setForgotNewPassword] = useState('');
+  const [forgotStep, setForgotStep] = useState(1);
+  const [forgotLoading, setForgotLoading] = useState(false);
+
   useEffect(() => {
     const restore = async () => {
       const storedToken = localStorage.getItem('nexus_token');
@@ -37,18 +43,18 @@ export function AuthProvider({ children }) {
       }
 
       try {
-        // Calls GET /auth/me with the stored token — gets fresh role from DB
+
         const freshProfile = await getMe();
         const userData = {
           uid:         freshProfile.uid,
           email:       freshProfile.email,
           displayName: freshProfile.username,
-          role:        freshProfile.role,   // role comes from server, never localStorage
+          role:        freshProfile.role,
         };
         setUser(userData);
         setProfile(userData);
       } catch {
-        // Token invalid or expired — clear everything and force re-login
+
         localStorage.removeItem('nexus_token');
         localStorage.removeItem('nexus_user');
         setToken(null);
@@ -73,14 +79,13 @@ export function AuthProvider({ children }) {
         toast.success('Login successful!');
       }
 
-      // Store the auth token — role is NOT stored in localStorage
       setToken(data.auth_token);
 
       const userData = {
         uid:         data.uid,
         email:       data.email,
         displayName: data.username,
-        role:        data.role,   // from server response only
+        role:        data.role,
       };
 
       setUser(userData);
@@ -94,9 +99,55 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const handleRequestOTP = async (e) => {
+    e.preventDefault();
+    setForgotLoading(true);
+    try {
+      await requestPasswordResetOTP(forgotEmail);
+      toast.success('OTP sent to your email!');
+      setForgotStep(2);
+    } catch (err) {
+      toast.error(err.message || 'Failed to send OTP');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async (e) => {
+    e.preventDefault();
+    setForgotLoading(true);
+    try {
+      await verifyOTP(forgotEmail, forgotOTP);
+      toast.success('OTP verified! Enter new password.');
+      setForgotStep(3);
+    } catch (err) {
+      toast.error(err.message || 'Invalid OTP');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setForgotLoading(true);
+    try {
+      await resetPassword(forgotEmail, forgotNewPassword);
+      toast.success('Password reset successfully! Please login.');
+      setShowForgotPassword(false);
+      setForgotStep(1);
+      setForgotEmail('');
+      setForgotOTP('');
+      setForgotNewPassword('');
+    } catch (err) {
+      toast.error(err.message || 'Failed to reset password');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
   const signOut = () => {
     localStorage.removeItem('nexus_token');
-    localStorage.removeItem('nexus_user');  // clean up any legacy data
+    localStorage.removeItem('nexus_user');
     setToken(null);
     setUser(null);
     setProfile(null);
@@ -104,6 +155,11 @@ export function AuthProvider({ children }) {
     setPassword('');
     setEmail('');
     setAuthError('');
+    setShowForgotPassword(false);
+    setForgotStep(1);
+    setForgotEmail('');
+    setForgotOTP('');
+    setForgotNewPassword('');
   };
 
   const value = {
@@ -115,7 +171,6 @@ export function AuthProvider({ children }) {
     signOut,
   };
 
-  // ── Loading splash ────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -144,7 +199,6 @@ export function AuthProvider({ children }) {
     );
   }
 
-  // ── Login / Register form ─────────────────────────────────────────────
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 overflow-hidden relative">
@@ -227,7 +281,7 @@ export function AuthProvider({ children }) {
                   minLength={isRegistering ? 8 : undefined}
                 />
 
-                {/* Inline error display */}
+                {}
                 {authError && (
                   <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
                     <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
@@ -244,7 +298,7 @@ export function AuthProvider({ children }) {
                   {authLoading ? 'Processing...' : (isRegistering ? 'Register' : 'Sign In')}
                 </Button>
 
-                <div className="text-center">
+                <div className="text-center flex justify-between items-center">
                   <button
                     type="button"
                     onClick={() => { setIsRegistering(!isRegistering); setAuthError(''); }}
@@ -252,6 +306,15 @@ export function AuthProvider({ children }) {
                   >
                     {isRegistering ? 'Already have an account? Sign In' : 'Need an account? Register'}
                   </button>
+                  {!isRegistering && (
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotPassword(true)}
+                      className="text-xs text-slate-400 hover:text-primary transition-colors"
+                    >
+                      Forgot Password?
+                    </button>
+                  )}
                 </div>
               </form>
 
@@ -261,6 +324,110 @@ export function AuthProvider({ children }) {
             </div>
           </div>
         </motion.div>
+
+        {}
+        {showForgotPassword && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+            onClick={() => setShowForgotPassword(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="relative z-10 w-full max-w-md mx-4 bg-white rounded-2xl p-6 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setShowForgotPassword(false)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+
+              <div className="text-center mb-6">
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
+                  <KeyRound className="w-6 h-6 text-primary" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-900">Reset Password</h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  {forgotStep === 1 && 'Enter your email to receive OTP'}
+                  {forgotStep === 2 && 'Enter the OTP sent to your email'}
+                  {forgotStep === 3 && 'Enter your new password'}
+                </p>
+              </div>
+
+              <form onSubmit={forgotStep === 1 ? handleRequestOTP : forgotStep === 2 ? handleVerifyOTP : handleResetPassword} className="space-y-4">
+                {forgotStep === 1 && (
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="email"
+                      placeholder="Enter your email"
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-lg text-slate-900 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                      required
+                    />
+                  </div>
+                )}
+
+                {forgotStep === 2 && (
+                  <div className="relative">
+                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Enter OTP"
+                      value={forgotOTP}
+                      onChange={(e) => setForgotOTP(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-lg text-slate-900 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                      required
+                    />
+                  </div>
+                )}
+
+                {forgotStep === 3 && (
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="password"
+                      placeholder="New password"
+                      value={forgotNewPassword}
+                      onChange={(e) => setForgotNewPassword(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-lg text-slate-900 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                      required
+                    />
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  {forgotStep > 1 && (
+                    <Button
+                      type="button"
+                      onClick={() => setForgotStep(forgotStep - 1)}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      <ArrowLeft className="w-4 h-4 mr-2" />
+                      Back
+                    </Button>
+                  )}
+                  <Button
+                    type="submit"
+                    disabled={forgotLoading}
+                    className="flex-1"
+                  >
+                    {forgotLoading ? 'Processing...' : (
+                      forgotStep === 1 ? 'Send OTP' :
+                      forgotStep === 2 ? 'Verify OTP' : 'Reset Password'
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
       </div>
     );
   }

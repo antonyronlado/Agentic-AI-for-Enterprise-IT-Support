@@ -19,8 +19,6 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-
-
 function isSlaWarning(ticket) {
   const diffMin = Math.floor((Date.now() - ticket.updatedAt) / 60000);
   if (ticket.status === 'open'        && diffMin > 30)  return true;
@@ -139,7 +137,7 @@ export function AgentDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#f5f5f7] flex flex-col">
+    <div className="h-screen bg-[#f5f5f7] flex flex-col overflow-hidden">
       <div className="absolute inset-0 technical-grid pointer-events-none" />
 
       <header className="relative z-50 border-b border-black/[0.06] bg-white/90 backdrop-blur-xl sticky top-0 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
@@ -184,7 +182,7 @@ export function AgentDashboard() {
       </header>
 
       <div className="relative flex-1 flex overflow-hidden max-w-[1800px] mx-auto w-full">
-        <aside className="w-14 border-r border-black/[0.06] bg-white/80 flex flex-col items-center py-5 gap-3 sticky top-14 h-[calc(100vh-3.5rem)]">
+        <aside className="w-14 border-r border-black/[0.06] bg-white/80 flex flex-col items-center py-5 gap-3 h-full shrink-0">
           {NAV_ITEMS.map(({ mode, Icon, title }) => (
             <button
               key={mode}
@@ -311,7 +309,6 @@ export function AgentDashboard() {
                         </div>
                       </div>
                     )}
-
 
                     <div className="sticky-tabs-bar -mx-6 px-6 pt-1">
                       <Tabs value={activeTab} onValueChange={setActiveTab}>
