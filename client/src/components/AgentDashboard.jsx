@@ -238,7 +238,7 @@ export function AgentDashboard() {
                     <div className="flex items-start justify-between gap-4">
                       <div className="space-y-2 flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[9px] font-mono text-slate-400 uppercase">#{(ticket._id || ticket.id || '').slice(0, 8)}</span>
+                          <span className="text-[9px] font-mono text-slate-400 uppercase">#{(ticket._id || ticket.id || '').slice(-8)}</span>
                           <StatusBadge status={ticket.status} size="md" />
                           {ticket.category && <span className="text-[9px] font-mono uppercase px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-600 border border-indigo-200">{ticket.category}</span>}
                           {ticket.priority && <span className="text-[9px] font-mono uppercase px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-slate-200">{ticket.priority}</span>}
@@ -294,7 +294,7 @@ export function AgentDashboard() {
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-bold text-violet-800">Linked Incident</p>
                           <p className="text-[10px] text-violet-700 mt-0.5">
-                            Linked to canonical ticket #{ticket.duplicate_of.slice(0, 12)}
+                            Linked to canonical ticket #{ticket.duplicate_of.slice(-8)}
                             {ticket.dedup_confidence ? ` — ${Math.round(ticket.dedup_confidence * 100)}% similarity` : ''}
                             {ticket.canonical_status ? ` · Status: ${ticket.canonical_status.replace(/_/g, ' ')}` : ''}
                           </p>
@@ -433,7 +433,7 @@ export function AgentDashboard() {
                     </div>
                     <span className="text-[10px] font-mono text-slate-400">{new Date(log.timestamp).toLocaleString()}</span>
                   </div>
-                  {log.ticket_id && <p className="text-[9px] font-mono text-slate-400 uppercase">Ticket: {log.ticket_id.slice(0, 8)}</p>}
+                  {log.ticket_id && <p className="text-[9px] font-mono text-slate-400 uppercase">Ticket: {log.ticket_id.slice(-8)}</p>}
                   <p className="text-sm text-slate-700 leading-relaxed">{log.details}</p>
                 </motion.div>
               )) : (

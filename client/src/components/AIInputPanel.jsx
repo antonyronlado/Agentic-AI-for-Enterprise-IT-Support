@@ -8,7 +8,7 @@ import {
   Ticket as TicketIcon, TrendingUp, AlertTriangle, Bot, Paperclip,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { FileUploadPanel } from './multimodal/FileUploadPanel';
+import { FileUploadPanel, buildTicketText } from './multimodal/FileUploadPanel';
 
 const API_BASE = import.meta.env.VITE_AI_ENGINE_URL || 'http://localhost:8000';
 
@@ -137,9 +137,12 @@ export function AIInputPanel({ onTicketCreated, stats }) {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmit();
   };
 
-  const handleInsertFromUpload = (text) => {
-    setDescription(prev => prev ? `${prev}\n\n${text}` : text);
-    setShowUpload(false);
+  const handleAnalyzedUpload = (result) => {
+    const text = buildTicketText(result);
+    if (result.suggested_title) {
+      setTitle(prev => prev.trim() ? prev : result.suggested_title);
+    }
+    setDescription(prev => prev.trim() ? prev : text);
   };
 
   return (
@@ -260,7 +263,7 @@ export function AIInputPanel({ onTicketCreated, stats }) {
                   <p className="text-[9px] font-mono uppercase text-indigo-600 tracking-wider mb-2 flex items-center gap-1">
                     <Paperclip className="w-3 h-3" /> Multimodal Analysis — Screenshot or Log File
                   </p>
-                  <FileUploadPanel onInsert={handleInsertFromUpload} />
+                  <FileUploadPanel onAnalyzed={handleAnalyzedUpload} />
                 </div>
               </motion.div>
             )}

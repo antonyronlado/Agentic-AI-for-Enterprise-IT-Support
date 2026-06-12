@@ -43,7 +43,6 @@ export function AuthProvider({ children }) {
       }
 
       try {
-
         const freshProfile = await getMe();
         const userData = {
           uid:         freshProfile.uid,
@@ -51,13 +50,43 @@ export function AuthProvider({ children }) {
           displayName: freshProfile.username,
           role:        freshProfile.role,
         };
+        // Cache profile so we can restore it offline
+        localStorage.setItem('nexus_user', JSON.stringify(userData));
         setUser(userData);
         setProfile(userData);
-      } catch {
+      } catch (err) {
+        const isNetworkError =
+          err instanceof TypeError ||
+          (err.message && (
+            err.message.includes('Failed to fetch') ||
+            err.message.includes('NetworkError') ||
+            err.message.includes('ERR_CONNECTION_REFUSED')
+          ));
 
-        localStorage.removeItem('nexus_token');
-        localStorage.removeItem('nexus_user');
-        setToken(null);
+        if (isNetworkError) {
+          // Backend is temporarily down — restore from cache so user stays logged in
+          const cached = localStorage.getItem('nexus_user');
+          if (cached) {
+            try {
+              const userData = JSON.parse(cached);
+              setUser(userData);
+              setProfile(userData);
+            } catch {
+              // corrupted cache — clear and show login
+              localStorage.removeItem('nexus_token');
+              localStorage.removeItem('nexus_user');
+              setToken(null);
+            }
+          } else {
+            // No cache — show login but keep token so retry works
+            setUser(null);
+          }
+        } else {
+          // 401 or other auth error — token is invalid, clear everything
+          localStorage.removeItem('nexus_token');
+          localStorage.removeItem('nexus_user');
+          setToken(null);
+        }
       } finally {
         setLoading(false);
       }

@@ -3,6 +3,9 @@ import os
 import re
 import logging
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from auth_deps import require_auth
 
@@ -10,10 +13,24 @@ logger = logging.getLogger("nexusdesk.router.multimodal")
 
 router = APIRouter(prefix="/multimodal", tags=["Multimodal"])
 
-_TESSERACT_PATH = os.getenv(
-    "TESSERACT_CMD",
+_TESSERACT_DEFAULT_CANDIDATES = [
+    r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+    r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
     r"D:\Applications\Tesseract OCR\tesseract.exe",
-)
+    "tesseract",
+]
+
+
+def _resolve_tesseract_path() -> str | None:
+    # Re-read env var every call so .env changes are picked up without restart
+    env_cmd = os.getenv("TESSERACT_CMD", "").strip()
+    candidates = ([env_cmd] if env_cmd else []) + _TESSERACT_DEFAULT_CANDIDATES
+    for candidate in candidates:
+        if not candidate:
+            continue
+        if candidate == "tesseract" or os.path.isfile(candidate):
+            return candidate
+    return None
 
 _MAX_FILE_BYTES = 5 * 1024 * 1024
 
@@ -74,6 +91,9 @@ _CAUSE_MAP = {
     "out of memory": "Memory exhaustion — possible resource leak",
     "disk full": "Storage capacity reached — cleanup or expand volume",
     "access denied": "Permission error — check user rights",
+    "folder in use": "File or folder is locked by another program — close the app using it and retry",
+    "open in another program": "File or folder is locked by another program — close the app using it and retry",
+    "can't be completed": "Windows blocked the action — a file lock or permission issue is likely",
 }
 
 def _extract_errors(text: str) -> list[str]:
@@ -103,6 +123,69 @@ def _parse_log(content: str) -> str:
             relevant.append(line.strip())
     return "\n".join(relevant[:50]) if relevant else content[:2000]
 
+
+_UI_NOISE_PHRASES = (
+    "try again", "cancel", "fewer details", "ok", "yes", "no",
+)
+
+# Characters that Tesseract commonly mis-reads as bullet points or decorative symbols
+_GARBLED_BULLET_RE = re.compile(
+    r"^[\s\=\-\_\*\•\■\▪\◆\►\»\|\'\'\`\~\^\#\@\!\%\&\(\)\[\]\{\}\<\>\+\/\\]+"
+)
+
+
+def _clean_ocr_line(line: str) -> str:
+    """Strip leading garbled OCR artefacts (fake bullets, symbols) and whitespace."""
+    line = line.strip()
+    # Remove leading non-alphanumeric clutter that Tesseract generates for bullet symbols
+    line = _GARBLED_BULLET_RE.sub("", line).strip()
+    return line
+
+
+def _is_ui_noise_line(line: str) -> bool:
+    ll = line.lower().strip()
+    if not ll:
+        return True
+    if ll.startswith("date created"):
+        return True
+    if ll in {"try again", "cancel", "ok", "yes", "no"}:
+        return True
+    if "try again" in ll and "cancel" in ll:
+        return True
+    if any(phrase == ll for phrase in _UI_NOISE_PHRASES):
+        return True
+    # Standalone folder/file label (e.g. TEST-MES) — metadata, not the error message
+    if re.match(r"^[A-Z][A-Z0-9_-]{1,15}$", line.strip()):
+        return True
+    # Pure symbol / single-character noise lines
+    if re.match(r"^[^\w]{1,3}$", line.strip()):
+        return True
+    return False
+
+
+def _clean_extracted_text(text: str) -> str:
+    if not text or text.startswith("["):
+        return text
+    kept = [_clean_ocr_line(line) for line in text.splitlines()]
+    kept = [line for line in kept if line and not _is_ui_noise_line(line)]
+    # Join with single newline to keep it readable rather than double-spaced
+    return "\n".join(kept)
+
+
+def _suggest_title(text: str, file_type: str) -> str:
+    t = text.lower()
+    if "folder in use" in t:
+        return "Folder In Use Error"
+    if "access denied" in t:
+        return "Access Denied Error"
+
+    for line in text.splitlines():
+        cleaned = re.sub(r"^[^\w]+", "", line).strip()
+        if len(cleaned) >= 8 and not _is_ui_noise_line(cleaned):
+            if any(kw in cleaned.lower() for kw in ("error", "failed", "exception", "cannot", "can't", "unable")):
+                return cleaned[:100]
+    return "Screenshot issue" if file_type == "image" else "Log file issue"
+
 @router.post("/upload")
 async def upload_file(
     file: UploadFile = File(...),
@@ -128,16 +211,66 @@ async def upload_file(
         file_type = "image"
         try:
             import pytesseract
-            from PIL import Image
-            pytesseract.pytesseract.tesseract_cmd = _TESSERACT_PATH
+            from PIL import Image, ImageEnhance
+            from pytesseract import TesseractNotFoundError
+
+            tesseract_path = _resolve_tesseract_path()
+            if not tesseract_path:
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "Tesseract OCR is not installed. Install it from "
+                        "https://github.com/UB-Mannheim/tesseract/wiki and set TESSERACT_CMD in backend/.env"
+                    ),
+                )
+
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
             img = Image.open(io.BytesIO(content_bytes))
-            extracted_text = pytesseract.image_to_string(img).strip()
+            
+            # --- OCR Enhancement Pipeline ---
+            from PIL import ImageFilter, ImageOps
+
+            # 1. Upscale small images so Tesseract has enough pixels to work with
+            MIN_DIM = 1200
+            w, h = img.size
+            scale = max(MIN_DIM / w, MIN_DIM / h, 1.0)
+            if scale > 1.0:
+                img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+
+            # 2. Convert to grayscale
+            img = img.convert("L")
+
+            # 3. Sharpen to improve edge clarity
+            img = img.filter(ImageFilter.SHARPEN)
+            img = img.filter(ImageFilter.SHARPEN)
+
+            # 4. Boost contrast
+            enhancer = ImageEnhance.Contrast(img)
+            img = enhancer.enhance(2.5)
+
+            # 5. Binarize with Otsu-style threshold via ImageOps
+            img = ImageOps.autocontrast(img)
+
+            # psm 6 = Assume a single uniform block of text (best for slides/screenshots)
+            custom_config = r'--oem 3 --psm 6'
+            extracted_text = pytesseract.image_to_string(img, config=custom_config).strip()
             if not extracted_text:
                 extracted_text = (
                     "[OCR ran but extracted no text — image may be low resolution or non-text content]"
                 )
+        except HTTPException:
+            raise
         except ImportError:
             raise HTTPException(status_code=503, detail="OCR libraries not installed")
+        except TesseractNotFoundError:
+            logger.error("Tesseract binary not found")
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Tesseract OCR binary not found. Set TESSERACT_CMD in backend/.env "
+                    "(e.g. C:\\Program Files\\Tesseract-OCR\\tesseract.exe)"
+                ),
+            )
         except Exception as exc:
             logger.error("OCR error: %s", exc)
             raise HTTPException(status_code=422, detail="OCR processing failed. Please try a clearer image.")
@@ -163,16 +296,29 @@ async def upload_file(
 
     errors = _extract_errors(extracted_text)
     probable_cause, confidence = _derive_cause(extracted_text, errors)
+    cleaned_extracted_text = _clean_extracted_text(extracted_text)
+    suggested_title = _suggest_title(extracted_text, file_type)
+
+    analysis = None
+    try:
+        from main import _analyzer
+        if _analyzer and extracted_text and not extracted_text.startswith("["):
+            analysis = await _analyzer.run(suggested_title, extracted_text)
+    except Exception as exc:
+        logger.warning("AI triage after multimodal upload failed: %s", exc)
 
     logger.info(
-        "Multimodal upload: file_type=%s errors=%d confidence=%d",
-        file_type, len(errors), confidence,
+        "Multimodal upload: file_type=%s errors=%d confidence=%d analyzed=%s",
+        file_type, len(errors), confidence, bool(analysis),
     )
 
     return {
-        "extracted_text":  extracted_text[:3000],
-        "detected_errors": errors,
-        "probable_cause":  probable_cause,
-        "confidence":      confidence,
-        "file_type":       file_type,
+        "extracted_text":         extracted_text[:3000],
+        "cleaned_extracted_text": cleaned_extracted_text[:3000],
+        "detected_errors":        errors,
+        "probable_cause":         probable_cause,
+        "confidence":             confidence,
+        "file_type":              file_type,
+        "suggested_title":        suggested_title,
+        "analysis":               analysis,
     }

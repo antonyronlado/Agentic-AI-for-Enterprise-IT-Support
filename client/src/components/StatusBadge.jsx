@@ -13,8 +13,8 @@ const CONFIG = {
     label: 'In Progress',
     dot: 'bg-amber-500',
     badge: 'bg-amber-50 text-amber-700 border-amber-200',
-    icon: Loader2,
-    animated: true,
+    icon: Clock,
+    animated: false,
   },
   analyzing: {
     label: 'Analyzing',

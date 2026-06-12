@@ -9,6 +9,7 @@ from agents.resolution_agent import ResolutionAgent
 from agents.dedup_agent import DedupAgent
 from agents.explain_agent import ExplainAgent
 from agents.remediation_agent import RemediationAgent
+from agents.sanitization_agent import SanitizationAgent
 from services.event_bus import bus
 from services.email_service import email_service
 
@@ -30,6 +31,7 @@ class AgentOrchestrator:
         self.dedup = DedupAgent(model_loader, kb)
         self.explain = ExplainAgent()
         self.remediation = RemediationAgent()
+        self.sanitizer = SanitizationAgent()
 
     async def run_pipeline(
         self,
@@ -69,7 +71,7 @@ class AgentOrchestrator:
                 "action": action,
                 "agent": agent,
                 "ticket_id": tid_str,
-                "details": details,
+                "details": self.sanitizer.sanitize(details),
                 "timestamp": int(datetime.now().timestamp() * 1000),
             })
 
@@ -218,17 +220,29 @@ class AgentOrchestrator:
                 resolution = await _with_retry("ResolutionAgent", lambda: self.resolver.run(
                     title, description, analysis, risk
                 ))
-                automated = resolution.get("automated", False)
-                if self.escalation_agent and risk:
+                automated     = resolution.get("automated", False)
+                match_quality = resolution.get("matchQuality", "weak")
+
+                # Only re-run escalation if automation status changed.
+                # Do NOT re-run if escalation was already decided — it would
+                # overwrite a "resolved" final_status back to "escalated".
+                if self.escalation_agent and risk and not risk.get("escalate"):
                     risk = self.escalation_agent.apply(risk, automated=automated)
-                final_status = risk.get("final_status", "in_progress") if risk else "in_progress"
-                risk_level = (risk or {}).get("risk_level", "low")
+
+                # Resolution agent's final_status is authoritative for strong/good/weak matches
+                resolution_status = resolution.get("_final_status")
+                if resolution_status and match_quality in ("strong", "good", "weak") and not risk.get("escalate"):
+                    final_status = resolution_status
+                else:
+                    final_status = risk.get("final_status", "in_progress") if risk else "in_progress"
+
+                risk_level      = (risk or {}).get("risk_level", "low")
                 confidence_score = (risk or {}).get("confidence_score")
-                low_confidence = (risk or {}).get("low_confidence", False)
+                low_confidence   = (risk or {}).get("low_confidence", False)
 
                 await _log("ResolutionAgent", "resolution_generated",
                     f"KB: {resolution.get('kbTitle', 'N/A')} | "
-                    f"Automated: {automated} | Status: {final_status}")
+                    f"Automated: {automated} | MatchQuality: {match_quality} | Status: {final_status}")
             except Exception as exc:
                 await _mark_failed("ResolutionAgent", str(exc))
                 return
@@ -338,6 +352,7 @@ class AgentOrchestrator:
                     steps=resolution["steps"],
                     result=resolution.get("result", "Resolved via agentic workflow."),
                     category=(analysis or {}).get("suggestedCategory", "other"),
+                    sub_category=(analysis or {}).get("sub_category", "general"),
                 )
                 await _log("LearningLoop", "kb_entry_added", f"Ticket '{title}' added to knowledge base.")
 

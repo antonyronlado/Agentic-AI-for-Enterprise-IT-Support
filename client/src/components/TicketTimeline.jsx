@@ -246,7 +246,7 @@ function TimelineItem({ ticket, isExpanded, onToggle, onDelete, onFeedback, onPa
         <div className="flex-1 min-w-0 space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[9px] font-mono text-slate-400 uppercase">
-              #{ticketId.slice(0, 8)}
+              #{ticketId.slice(-8)}
             </span>
             <StatusBadge status={statusKey} size="sm" />
           </div>

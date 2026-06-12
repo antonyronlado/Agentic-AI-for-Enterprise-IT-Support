@@ -13,6 +13,9 @@ export default defineConfig({
       '@': path.resolve(__dirname, '.'),
     },
   },
+  css: {
+    postcss: {},
+  },
   server: {
     port: 3000,
     host: '0.0.0.0',

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import config
 
 from contextlib import asynccontextmanager
@@ -62,13 +63,20 @@ async def lifespan(app: FastAPI):
     _copilot_agent    = CopilotAgent(loader, _kb)
     _trend_agent      = TrendAgent()
 
-    logger.info("Pre-warming BART classifier...")
-    await asyncio.to_thread(lambda: loader.classifier)
+    async def _prewarm_classifier():
+        try:
+            logger.info("Pre-warming BART classifier in background...")
+            await asyncio.to_thread(lambda: loader.classifier)
+            logger.info("BART classifier ready.")
+        except Exception:
+            logger.exception("BART pre-warm failed; will retry on first request.")
+
+    asyncio.create_task(_prewarm_classifier())
 
     from database import get_db
     _sla_task = asyncio.create_task(run_sla_monitor(get_db))
     logger.info("SLA Monitor started.")
-    logger.info("All agents ready. NexusDesk Enterprise AI-Native IT Operations Platform is live.")
+    logger.info("NexusDesk is live. AI classifier may still be loading in the background.")
     yield
 
     if _sla_task:
@@ -79,7 +87,6 @@ async def lifespan(app: FastAPI):
             pass
     logger.info("NexusDesk shutting down.")
 
-import os
 _raw_origins = os.getenv(
     "ALLOWED_ORIGINS",
     "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173",
@@ -108,8 +115,8 @@ async def global_exception_handler(request: Request, exc: Exception):
         request.method, request.url.path, type(exc).__name__, exc,
         exc_info=True,
     )
-    origin = request.headers.get("origin", "")
-    allow_origin = origin if origin in ALLOWED_ORIGINS else ALLOWED_ORIGINS[0]
+    origin      = request.headers.get("origin", "")
+    allow_origin = origin if origin in ALLOWED_ORIGINS else (ALLOWED_ORIGINS[0] if ALLOWED_ORIGINS else "*")
     return JSONResponse(
         status_code=500,
         content={"error": "Internal server error. Please try again later."},

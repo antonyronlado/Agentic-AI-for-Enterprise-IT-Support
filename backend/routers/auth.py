@@ -13,6 +13,8 @@ from pydantic import BaseModel, field_validator
 from database import get_db
 from typing import Optional
 
+import re
+
 logger = logging.getLogger("nexusdesk.auth")
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -22,12 +24,18 @@ _BCRYPT_ROUNDS = 12
 otp_store: dict = {}
 
 _login_attempts: dict[str, list[float]] = {}
-_MAX_ATTEMPTS = 10
+_MAX_ATTEMPTS   = 10
 _WINDOW_SECONDS = 60
+_MAX_IPS_STORED = 5000   # prevent unbounded memory growth
+
+_EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$')
+
+def _valid_email(email: str) -> bool:
+    return bool(email and len(email) <= 254 and _EMAIL_RE.match(email))
 
 
 def _check_rate_limit(ip: str):
-    now = time.time()
+    now      = time.time()
     attempts = _login_attempts.get(ip, [])
     attempts = [t for t in attempts if now - t < _WINDOW_SECONDS]
     if len(attempts) >= _MAX_ATTEMPTS:
@@ -37,6 +45,10 @@ def _check_rate_limit(ip: str):
         )
     attempts.append(now)
     _login_attempts[ip] = attempts
+    # Prune oldest IPs to prevent unbounded memory growth
+    if len(_login_attempts) > _MAX_IPS_STORED:
+        oldest_ip = next(iter(_login_attempts))
+        del _login_attempts[oldest_ip]
 
 
 class RegisterRequest(BaseModel):
@@ -110,7 +122,9 @@ async def register(req: RegisterRequest, db=Depends(get_db)):
     if existing:
         raise HTTPException(status_code=400, detail="Username or email already exists")
 
-    role = "admin" if "@admin" in req.email.lower() else "user"
+    # Role is set to "user" by default.
+    # Admin accounts must be promoted manually via the database — never via email.
+    role = "user"
 
     token = _generate_token()
     user_doc = {
@@ -119,6 +133,7 @@ async def register(req: RegisterRequest, db=Depends(get_db)):
         "password":  _hash_password(req.password),
         "role":      role,
         "auth_token": token,
+        "token_created_at": int(time.time() * 1000),
         "created_at": int(time.time() * 1000),
     }
 
@@ -167,6 +182,7 @@ async def login(req: LoginRequest, request: Request, db=Depends(get_db)):
     new_token = _generate_token()
     update_fields: dict = {
         "auth_token": new_token,
+        "token_created_at": int(time.time() * 1000),
         "last_login":  int(time.time() * 1000),
     }
     if needs_migration:
@@ -254,15 +270,54 @@ def _send_email(to_email: str, subject: str, body: str) -> bool:
 class ForgotPasswordRequest(BaseModel):
     email: str
 
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not _valid_email(v):
+            raise ValueError("Invalid email address format")
+        return v
+
 
 class VerifyOTPRequest(BaseModel):
     email: str
-    otp: str
+    otp:   str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not _valid_email(v):
+            raise ValueError("Invalid email address format")
+        return v
+
+    @field_validator("otp")
+    @classmethod
+    def validate_otp(cls, v: str) -> str:
+        v = v.strip()
+        if not v.isdigit() or len(v) != 6:
+            raise ValueError("OTP must be exactly 6 digits")
+        return v
 
 
 class ResetPasswordRequest(BaseModel):
-    email: str
+    email:        str
     new_password: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not _valid_email(v):
+            raise ValueError("Invalid email address format")
+        return v
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return v
 
 
 @router.post("/forgot-password")
@@ -339,8 +394,8 @@ async def reset_password(req: ResetPasswordRequest, db=Depends(get_db)):
         del otp_store[req.email]
         raise HTTPException(status_code=400, detail="OTP has expired")
 
-    import hashlib
-    hashed_password = hashlib.sha256(req.new_password.encode()).hexdigest()
+    # Use bcrypt — consistent with register/login endpoints
+    hashed_password = _hash_password(req.new_password)
 
     result = await db.users.update_one(
         {"email": req.email},
@@ -359,3 +414,16 @@ async def reset_password(req: ResetPasswordRequest, db=Depends(get_db)):
     })
 
     return {"message": "Password reset successfully"}
+
+
+@router.post("/logout")
+async def logout(request: Request, db=Depends(get_db)):
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+        if token:
+            await db.users.update_one(
+                {"auth_token": token},
+                {"$unset": {"auth_token": "", "token_created_at": ""}}
+            )
+    return {"message": "Logged out successfully"}

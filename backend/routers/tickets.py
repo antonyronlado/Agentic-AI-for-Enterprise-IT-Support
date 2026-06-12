@@ -102,13 +102,13 @@ class TicketOut(BaseModel):
     title:       str
     description: str
     status:      str
-    priority:    str
-    category:    str
+    priority:    Optional[str] = "medium"
+    category:    Optional[str] = "other"
     createdAt:   int
     updatedAt:   int
-    userId:      str
-    userEmail:   str
-    history:     List[dict]
+    userId:      Optional[str] = None
+    userEmail:   Optional[str] = None
+    history:     Optional[List[dict]] = []
     analysis:           Optional[Any] = None
     riskAssessment:     Optional[Any] = None
     resolution:         Optional[Any] = None
